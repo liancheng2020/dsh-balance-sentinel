@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Balance Sentinel",
-    "description": "DeepSeek low-balance alerts pushed to Feishu/DingTalk IM. Local DSH Desktop or local web host only, monitored while DSH runs; no API key on hosts with the official account service."
+    "description": "DeepSeek low-balance alerts pushed to Feishu/DingTalk IM. Local DSH Desktop or local web host only, monitored while DSH runs; key-free host accounts are supported when the account service is available and signed in."
   },
   "sub": "DeepSeek balance watch · proactive low-balance alerts",
   "refresh": "Refresh",

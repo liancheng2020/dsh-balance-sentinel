@@ -12,8 +12,8 @@ import { join } from 'node:path'
 process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'sentinel-selftest-'))
 
 const { normalizeWallets, pickPrimary, levelOf, effectiveThresholds, applyBalance, deliverPending, formatAlert, createBalanceSource, startMonitor, RECOVERY_COOLDOWN_MS } = await import('../lib/balance.js')
-const { mergeStateFromDisk, acquireStateLock, saveState, loadState } = await import('../lib/state.js')
-const { createNotifier, chunkContent, withSignature, DEFAULT_SIGNATURE, toFeishuCard } = await import('../lib/notify.js')
+const { mergeStateFromDisk, acquireStateLock, saveState, loadState, webhookFingerprint } = await import('../lib/state.js')
+const { createNotifier, chunkContent, withSignature, DEFAULT_SIGNATURE, REPO_URL, INSTALL_SPEC, toFeishuCard, toPlainText } = await import('../lib/notify.js')
 const { startLocalApi } = await import('../lib/localapi.js')
 const { isQuietNow } = await import('../lib/time.js')
 
@@ -208,10 +208,27 @@ test('F3 resolved notice explains threshold cause', () => {
   assert.ok(top.title.includes('已恢复'))
   assert.ok(!top.text.includes('解除原因'))
 })
-test('F2 signature carries install entry, opt-out', () => {
-  assert.ok(DEFAULT_SIGNATURE.includes('github:liancheng2020/dsh-balance-sentinel'))
+test('F2 signature keeps the install spec readable and tappable, opt-out', () => {
+  // The label stays the recognisable `github:owner/repo` spec (with its 安装：
+  // prefix); only that spec is the link. Replacing the text with a generic
+  // "安装说明" lost the distinction the previous footer had.
+  assert.ok(DEFAULT_SIGNATURE.includes(`安装：[${INSTALL_SPEC}](${REPO_URL}#readme)`), 'signature must label the link with the install spec')
+  assert.ok(!DEFAULT_SIGNATURE.includes('[安装说明]'))
   assert.ok(withSignature('x', {}).endsWith(DEFAULT_SIGNATURE))
   assert.ok(!withSignature('x', { signature: false }).includes('via'))
+  // Feishu renders the footer from a note element: plain_text would print the
+  // markdown source, so it must be lark_md to keep the link tappable.
+  const note = toFeishuCard('t', withSignature('body', {})).elements.find((e) => e.tag === 'note')
+  assert.equal(note.elements[0].tag, 'lark_md')
+  assert.ok(note.elements[0].content.includes('#readme'))
+  // Channels without markdown must show the label only: no "](" leftovers and no
+  // duplicated URL, while bare URLs elsewhere in the body stay intact.
+  const plain = toPlainText(withSignature('body', {}))
+  assert.ok(!plain.includes(']('), 'plain channels must not show markdown source')
+  assert.ok(plain.includes(`安装：${INSTALL_SPEC}`), 'plain footer keeps the install spec')
+  assert.ok(!plain.includes(REPO_URL), 'plain channels must not append the link target')
+  assert.ok(toPlainText('充值：https://platform.deepseek.com/').includes('https://platform.deepseek.com/'),
+    'bare URLs in the body must survive flattening')
 })
 
 // ---- S: source chain ----
@@ -396,6 +413,87 @@ await atest('B6 test-push reaches webhook', async () => {
   stop()
   hook.closeAllConnections?.()
   await new Promise((r) => hook.close(r))
+})
+
+// ---- V: configured != connected (test result is remembered, and invalidated) ----
+await atest('B7 test-push records the result; a new webhook clears it', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  const stop = bridge(17437, s, { notifier: { send: async () => ({ ok: true, chunks: 1, status: 200 }) } })
+  await wait()
+  await (await fetch('http://127.0.0.1:17437/test-push', { method: 'POST' })).json()
+  let st = await (await fetch('http://127.0.0.1:17437/status')).json()
+  assert.equal(st.verify.ok, true, 'a delivered test must be recorded')
+  assert.equal(st.verify.channel, 'wecom')
+  // Re-saving the same webhook must keep the result: a no-op edit is not a
+  // re-test, and blanking it would flash "untested" for an unchanged endpoint.
+  const same = await (await fetch('http://127.0.0.1:17437/webhook', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: 'wecom', url: 'http://127.0.0.1:1/a' }),
+  })).json()
+  assert.equal(same.verify?.ok, true, 'unchanged webhook keeps its test result')
+  // Repointing the webhook must invalidate the old "verified": otherwise the
+  // panel keeps claiming delivery for an endpoint that was never tested.
+  const w = await (await fetch('http://127.0.0.1:17437/webhook', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: 'wecom', url: 'http://127.0.0.1:1/b' }),
+  })).json()
+  assert.equal(w.ok, true)
+  st = await (await fetch('http://127.0.0.1:17437/status')).json()
+  assert.equal(st.verify, null, 'editing the webhook must drop the stale test result')
+  stop()
+})
+await atest('B8 failed test-push records ok:false with the reason', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  const stop = bridge(17438, s, {
+    notifier: { send: async () => ({ ok: false, chunks: 1, status: 200, code: 93000, error: 'invalid webhook' }) },
+  })
+  await wait()
+  await (await fetch('http://127.0.0.1:17438/test-push', { method: 'POST' })).json()
+  const st = await (await fetch('http://127.0.0.1:17438/status')).json()
+  assert.equal(st.verify.ok, false)
+  assert.ok(String(st.verify.error).includes('invalid webhook'))
+  stop()
+})
+await atest('B9 a verdict is pinned to the tested webhook; a repoint discards it', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  let release
+  const gate = new Promise((r) => { release = r })
+  const stop = bridge(17439, s, { notifier: { send: async () => { await gate; return { ok: true, chunks: 1, status: 200 } } } })
+  await wait()
+  // Start testing A, then have another page save B while A's send is in flight.
+  const pending = fetch('http://127.0.0.1:17439/test-push', { method: 'POST' }).then((r) => r.json())
+  await wait()
+  const w = await (await fetch('http://127.0.0.1:17439/webhook', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: 'wecom', url: 'http://127.0.0.1:1/b' }),
+  })).json()
+  assert.equal(w.ok, true)
+  release()
+  const j = await pending
+  assert.equal(j.stale, true, 'a verdict for a replaced webhook must be flagged stale')
+  const st = await (await fetch('http://127.0.0.1:17439/status')).json()
+  assert.equal(st.verify, null, "A's success must never certify B")
+  stop()
+})
+await atest('B10 failed test beats an older success even when the save fails', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  s.verify = { at: 1, ok: true, channel: 'wecom', error: null, fp: 'old', persisted: true }
+  const stop = bridge(17440, s, {
+    save: () => false, // state file locked / unwritable
+    notifier: { send: async () => ({ ok: false, chunks: 1, status: 200, code: 93000, error: 'invalid webhook' }) },
+  })
+  await wait()
+  const j = await (await fetch('http://127.0.0.1:17440/test-push', { method: 'POST' })).json()
+  assert.equal(j.ok, false)
+  assert.equal(j.persisted, false, 'the response must admit the result was not written')
+  const st = await (await fetch('http://127.0.0.1:17440/status')).json()
+  assert.equal(st.verify.ok, false, 'the previous green success must not survive a failed test')
+  assert.equal(st.verify.persisted, false, 'the panel must know it was not persisted')
+  stop()
 })
 
 // ---- W: wecom chunking still within platform cap ----
@@ -677,6 +775,103 @@ await atest('M10 state + fallback receipt both unwritable: risk is surfaced, ded
   assert.equal(sends, 2, 'without any writable record the alert is re-sent — the documented limit')
   ctl.stop()
   rmSync(blocker, { recursive: true, force: true })
+})
+
+// Real temp state file: the disk still holds an older success while memory holds
+// a failure that could not be written. A monitor cycle merges before deciding,
+// and that merge used to resurrect the old green verdict.
+await atest('M11 an unwritten verdict beats the older success on disk', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  s.verify = { at: 1000, ok: true, channel: 'wecom', error: null, fp: webhookFingerprint(s.webhook), persisted: true }
+  assert.equal(saveState(s, undefined, { own: ['webhook', 'verify'] }), true)
+
+  // The panel's failed test could not be written: it exists only in memory.
+  s.verify = { at: 2000, ok: false, channel: 'wecom', error: 'invalid webhook', fp: webhookFingerprint(s.webhook), persisted: false }
+  mergeStateFromDisk(s) // what any monitor cycle does before deciding
+  assert.equal(s.verify.ok, false, 'a newer unwritten failure must survive the merge')
+  assert.equal(s.verify.persisted, false, 'and must keep saying it was not persisted')
+  mergeStateFromDisk(s)
+  assert.equal(s.verify.ok, false, 'and stay stable across cycles')
+  assert.equal(loadState().verify.ok, true, 'the file itself still holds the old success')
+})
+await atest('M12 a verdict dies with the config it was tested against', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  s.verify = { at: 1000, ok: true, channel: 'wecom', error: null, fp: webhookFingerprint(s.webhook), persisted: true }
+  assert.equal(saveState(s, undefined, { own: ['webhook', 'verify'] }), true)
+
+  // Another page repoints the webhook and clears the verdict on disk.
+  const disk = loadState()
+  disk.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/b', secret: '' }
+  disk.verify = null
+  assert.equal(saveState(disk, undefined, { own: ['webhook', 'verify'] }), true)
+
+  // Memory still holds an unwritten failure produced by the OLD webhook.
+  s.verify = { at: 2000, ok: false, channel: 'wecom', error: 'invalid webhook', fp: webhookFingerprint(s.webhook), persisted: false }
+  mergeStateFromDisk(s)
+  assert.equal(s.webhook.url, 'http://127.0.0.1:1/b', 'config comes from disk')
+  assert.equal(s.verify, null, 'the old verdict must not outlive its config')
+})
+
+// End-to-end: a real monitor cycle (disk merge at the start, real saveState at
+// the end) must not swap the unwritten failure back for the older success, and
+// once that cycle does write it, the verdict stops claiming "not persisted".
+await atest('M13 a full monitor cycle keeps the newer failed verdict and persists it', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  s.verify = { at: 1000, ok: true, channel: 'wecom', error: null, fp: webhookFingerprint(s.webhook), persisted: true }
+  assert.equal(saveState(s, undefined, { own: ['webhook', 'verify'] }), true) // disk: older success
+
+  // Panel: the new test failed AND its save failed — memory only.
+  s.verify = { at: 2000, ok: false, channel: 'wecom', error: 'invalid webhook', fp: webhookFingerprint(s.webhook), persisted: false }
+
+  const ctl = startMonitor({
+    fetchBalance: async () => okFr(10),
+    state: s,
+    notifier: okNotifier,
+    config: { balance: { pollSeconds: 3600 } },
+    save: (x) => saveState(x),
+  })
+  ctl.poke()
+  await pause(400)
+  ctl.stop()
+
+  assert.equal(s.verify.ok, false, 'the failed verdict must survive a full cycle')
+  assert.notEqual(s.verify.persisted, false, 'a verdict the cycle did write is no longer unpersisted')
+  assert.equal(loadState().verify.ok, false, 'the file now holds the failure')
+})
+await atest('M14 a cycle does not carry a verdict onto a replaced webhook', async () => {
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  s.verify = { at: 1000, ok: true, channel: 'wecom', error: null, fp: webhookFingerprint(s.webhook), persisted: true }
+  assert.equal(saveState(s, undefined, { own: ['webhook', 'verify'] }), true)
+
+  // Another page repoints the webhook on disk while memory still holds an
+  // unwritten failure produced by the old one.
+  const disk = loadState()
+  disk.webhook = { channel: 'wecom', url: 'http://127.0.0.1:1/b', secret: '' }
+  disk.verify = null
+  assert.equal(saveState(disk, undefined, { own: ['webhook', 'verify'] }), true)
+  s.verify = {
+    at: 2000, ok: false, channel: 'wecom', error: 'invalid webhook',
+    fp: webhookFingerprint({ channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }), persisted: false,
+  }
+
+  const ctl = startMonitor({
+    fetchBalance: async () => okFr(10),
+    state: s,
+    notifier: okNotifier,
+    config: { balance: { pollSeconds: 3600 } },
+    save: (x) => saveState(x),
+  })
+  ctl.poke()
+  await pause(400)
+  ctl.stop()
+
+  assert.equal(s.webhook.url, 'http://127.0.0.1:1/b', 'config comes from disk')
+  assert.equal(s.verify, null, 'a verdict for the old webhook must not follow the config')
+  assert.equal(loadState().verify, null, 'and it must not be written back either')
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -19,7 +19,15 @@ function createMiniReact() {
   const useState = (init) => {
     const store = ctx.store, i = ctx.idx++
     if (store.hooks.length <= i) store.hooks[i] = typeof init === 'function' ? init() : init
-    const set = (v) => { store.hooks[i] = typeof v === 'function' ? v(store.hooks[i]) : v }
+    // React runs a functional update during the NEXT render, not at call time.
+    // Applying it eagerly here would hide a real class of bug: an updater that
+    // compares against a closure variable which the caller reassigns on the very
+    // next line. That is what left the threshold inputs empty in the real panel
+    // while every test stayed green.
+    const set = (v) => {
+      if (typeof v === 'function') { store.queue.push([i, v]); return }
+      store.hooks[i] = v
+    }
     return [store.hooks[i], set]
   }
   // Dependency-aware: a real component re-runs an effect when deps change, and
@@ -41,14 +49,27 @@ function createMiniReact() {
     return store.refs[i]
   }
   const useMemo = (fn) => fn()
+  // Pending functional updates are applied at the top of a render pass, the way
+  // React does it, so a test cannot accidentally depend on eager application.
+  const flushPending = () => {
+    for (const s of stores.values()) {
+      while (s.queue.length) { const [i, fn] = s.queue.shift(); s.hooks[i] = fn(s.hooks[i]) }
+    }
+  }
+  let depth = 0
   function render(el, path = '0') {
+    if (depth === 0) flushPending()
+    depth++
+    try { return renderNode(el, path) } finally { depth-- }
+  }
+  function renderNode(el, path) {
     if (el == null || typeof el === 'boolean') return null
     if (typeof el === 'string' || typeof el === 'number') return { text: String(el) }
     if (Array.isArray(el)) return { array: el.map((c, i) => render(c, path + '/' + i)).filter(Boolean) }
     const { type, props, children } = el
     if (typeof type === 'function') {
       const key = path + ':' + (type.name || 'anon')
-      if (!stores.has(key)) stores.set(key, { hooks: [], effects: [], refs: [], ran: false })
+      if (!stores.has(key)) stores.set(key, { hooks: [], effects: [], refs: [], ran: false, queue: [] })
       const store = stores.get(key); const prev = ctx
       ctx = { hooks: store.hooks, idx: 0, store }
       const out = type({ ...props, children })
@@ -99,6 +120,9 @@ const HOST = {
 let statusFails = 0
 let statusCalls = 0
 let webhookFails = 0
+let testPushFails = 0
+let testPushStale = 0
+let testPushUnpersisted = 0
 const posts = []
 const fetchMock = async (url, init) => {
   const u = String(url)
@@ -117,7 +141,22 @@ const fetchMock = async (url, init) => {
     }
     return { ok: true, status: 200, json: async () => ({ ok: true, channel: body.channel, configured: !off, urlHost: off ? '' : 'qyapi.weixin.qq.com', secretSet: false }) }
   }
-  if (u.startsWith('http://127.0.0.1:17430/test-push')) { posts.push(['test-push']); return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom' }) } }
+  if (u.startsWith('http://127.0.0.1:17430/test-push')) {
+    posts.push(['test-push'])
+    if (testPushStale > 0) {
+      testPushStale--
+      return { ok: true, status: 200, json: async () => ({ ok: true, stale: true, chunks: 1, channel: 'wecom' }) }
+    }
+    if (testPushUnpersisted > 0) {
+      testPushUnpersisted--
+      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, persisted: false }) }
+    }
+    if (testPushFails > 0) {
+      testPushFails--
+      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, hint: 'Webhook 地址无效' }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom' }) }
+  }
   if (u.startsWith('http://127.0.0.1:17430/prefs')) {
     const body = JSON.parse(init?.body || '{}')
     posts.push(['prefs', body])
@@ -181,8 +220,16 @@ await atest('P1 hero shows official balance + level badge', async () => {
   const { render, dispose } = boot()
   render()
   await sleep(30)
-  const txt = textOf(render())
+  const node = render()
+  const txt = textOf(node)
   if (!txt.includes('¥12.50') || !txt.includes('余额预警')) throw new Error(txt.slice(0, 200))
+  // Re-entering the panel used to leave both threshold inputs blank with a red
+  // "must be positive" warning: the first /status must seed the drafts.
+  const warnIn = findById(node, 'sentinel-warn')
+  const critIn = findById(node, 'sentinel-crit')
+  if (warnIn.props.value !== '20' || critIn.props.value !== '5') {
+    throw new Error('threshold drafts not seeded: ' + JSON.stringify([warnIn.props.value, critIn.props.value]))
+  }
   dispose()
 })
 await atest('P2 unavailable: clear reason + retry', async () => {
@@ -330,7 +377,7 @@ await atest('P12 support boundary shown in zh/en; bridge-down names remote panel
   await sleep(30)
   let txt = textOf(b.render())
   if (!txt.includes('仅支持本机 DSH Desktop') || !txt.includes('不支持远程 Web 面板')) throw new Error(txt.slice(0, 300))
-  if (!txt.includes('免 Key 需宿主提供账号服务且已登录')) throw new Error('no-key boundary missing')
+  if (!txt.includes('支持宿主账号免填 Key：需宿主提供账号服务且已登录')) throw new Error('no-key boundary missing')
   b.dispose()
 
   resetHost()
@@ -340,6 +387,7 @@ await atest('P12 support boundary shown in zh/en; bridge-down names remote panel
   txt = textOf(b.render())
   if (!txt.includes('Local DSH Desktop or local web host only')) throw new Error(txt.slice(0, 300))
   if (!txt.includes('remote web panels are not supported')) throw new Error('en support boundary incomplete')
+  if (!txt.includes('Key-free host accounts are supported')) throw new Error('en key-free boundary must stay conditional')
   b.dispose()
 
   resetHost(); statusFails = 99
@@ -349,6 +397,119 @@ await atest('P12 support boundary shown in zh/en; bridge-down names remote panel
   if (!txt.includes('远程 Web 面板')) throw new Error('bridge-down must name the remote-panel case')
   statusFails = 0
   b.dispose()
+})
+
+// Regression: a server-side rejection used to return before clearing `busy`, so
+// the save button stayed on "保存中…" and disabled forever.
+await atest('P14 save failure clears busy; edit then retry succeeds', async () => {
+  resetHost(); HOST.configured = false; HOST.channel = 'none'
+  webhookFails = 1
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  let node = render()
+  findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
+  node = render()
+  await findButton(node, '仅保存').props.onClick()
+  await sleep(80)
+  node = render()
+  if (!textOf(node).includes('URL 格式不对')) throw new Error('server rejection must be shown')
+  const retryBtn = findButton(node, '仅保存')
+  if (!retryBtn) throw new Error('button stuck on 保存中 after a failed save')
+  if (retryBtn.props.disabled) throw new Error('button must be re-enabled after a failed save')
+  findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=ok' } })
+  node = render()
+  await findButton(node, '仅保存').props.onClick()
+  await sleep(80)
+  node = render()
+  const txt = textOf(node)
+  if (!txt.includes('已保存，立即生效')) throw new Error('retry after fixing the input must succeed')
+  if (!txt.includes('已配置，待测试')) throw new Error('saved-but-untested must not read as connected')
+  webhookFails = 0
+  dispose()
+})
+await atest('P15 configured vs connected: untested / verified / failed', async () => {
+  resetHost(); HOST.verify = null
+  let b = boot(); b.render(); await sleep(30)
+  let txt = textOf(b.render())
+  if (!txt.includes('已配置，待测试')) throw new Error('untested state missing: ' + txt.slice(0, 200))
+  if (txt.includes('最近测试成功')) throw new Error('must not claim delivery before a test')
+  b.dispose()
+
+  resetHost(); HOST.verify = { at: Date.now(), ok: true, channel: 'wecom', error: null }
+  b = boot(); b.render(); await sleep(30)
+  txt = textOf(b.render())
+  if (!txt.includes('最近测试成功')) throw new Error('verified state missing')
+  b.dispose()
+
+  resetHost(); HOST.verify = { at: Date.now(), ok: false, channel: 'wecom', error: 'errcode 93000 invalid webhook' }
+  b = boot(); b.render(); await sleep(30)
+  txt = textOf(b.render())
+  if (!txt.includes('最近测试失败') || !txt.includes('93000')) throw new Error('failed state must carry the reason: ' + txt.slice(0, 240))
+  b.dispose()
+})
+// Regression: re-entering the panel once showed two empty threshold inputs plus
+// a red "must be positive" line, because the drafts were seeded only by a /status
+// that may land late (or not at all). An untouched draft must fall back to the
+// host value instead of rendering ''.
+await atest('P17 thresholds never render blank; fallback when host omits them', async () => {
+  resetHost(); delete HOST.thresholds
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  const node = render()
+  const w = findById(node, 'sentinel-warn').props.value
+  const c = findById(node, 'sentinel-crit').props.value
+  if (w !== '20' || c !== '5') throw new Error('blank/incorrect fallback: ' + JSON.stringify([w, c]))
+  if (textOf(node).includes('需为正数')) throw new Error('validation error shown for untouched defaults')
+  dispose()
+})
+await atest('P16 save&test failure still re-enables the button', async () => {
+  resetHost(); HOST.configured = false; HOST.channel = 'none'
+  testPushFails = 1
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  let node = render()
+  findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
+  node = render()
+  await findButton(node, '保存并发送测试').props.onClick()
+  await sleep(120)
+  node = render()
+  const txt = textOf(node)
+  if (!txt.includes('93000')) throw new Error('test failure must be surfaced: ' + txt.slice(0, 240))
+  if (txt.includes('保存中') || txt.includes('发送中')) throw new Error('button stuck busy after a failed test')
+  if (!findButton(node, '发送测试推送')) throw new Error('test button not restored')
+  testPushFails = 0
+  dispose()
+})
+// A verdict can arrive after another page repointed the webhook; the panel must
+// say it was discarded instead of letting it read as the new channel's result.
+await atest('P19 stale verdict is explained, never shown as success', async () => {
+  resetHost()
+  testPushStale = 1
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  await findButton(render(), '发送测试推送').props.onClick()
+  await sleep(80)
+  const txt = textOf(render())
+  if (!txt.includes('推送配置已变更')) throw new Error('stale verdict must be explained: ' + txt.slice(0, 240))
+  if (txt.includes('测试推送成功')) throw new Error('stale verdict must not read as success')
+  dispose()
+})
+await atest('P20 unpersisted verdict is shown and labelled', async () => {
+  resetHost()
+  testPushUnpersisted = 1
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  await findButton(render(), '发送测试推送').props.onClick()
+  await sleep(80)
+  const txt = textOf(render())
+  if (!txt.includes('93000')) throw new Error('failure must still be shown: ' + txt.slice(0, 240))
+  if (!txt.includes('重启后会丢失')) throw new Error('unpersisted result must say so')
+  dispose()
 })
 
 await atest('P13 zh/en catalogs have identical keys', async () => {

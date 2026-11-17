@@ -53,9 +53,9 @@ window.__ModuleLoader__.load({
         'hero.topup': '去充值', 'hero.checkedAt': '核对于 {t}', 'hero.source': '官方账户同源 · 免估算',
         'level.normal': '余额正常', 'level.warn': '余额预警', 'level.critical': '余额告急',
         'reason.title': '余额暂不可用', 'reason.retry': '重试',
-        'reason.no-source': '宿主没有账号服务，也未提供 API Key。带官方「设置→账号与余额」的宿主免 Key；否则在配置 balance.apiKey 或环境变量 DEEPSEEK_API_KEY 提供 Key。',
+        'reason.no-source': '宿主没有账号服务，也未提供 API Key。带官方「设置→账号与余额」的宿主支持免填 Key；否则在配置 balance.apiKey 或环境变量 DEEPSEEK_API_KEY 提供 Key。',
         'reason.signed-out': '宿主未登录 DeepSeek 账户：请在官方「设置→账号与余额」登录后重试。',
-        'reason.unauthorized': 'API Key 无效或过期：请更新 Key，或改用宿主账号登录（免 Key）。',
+        'reason.unauthorized': 'API Key 无效或过期：请更新 Key，或改用宿主账号登录（免填 Key）。',
         'reason.account-failed': '宿主账号服务查询失败，稍后自动重试。',
         'reason.account-error': '宿主账号服务调用异常，稍后自动重试。',
         'reason.network': '网络不可达：确认本机能访问 api.deepseek.com（或被代理/防火墙拦截）。',
@@ -66,12 +66,18 @@ window.__ModuleLoader__.load({
         'alert.pending': '有一条「{k}」通知待发送。', 'alert.hold': '告警发送受阻：{e}', 'alert.retry': '重试发送',
         'alert.retried': '已触发重试，立即补发。',
         'monitor.off': '后台监控已关闭（balance.enabled=false），面板仅展示。',
-        'support.scope': '仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。免 Key 需宿主提供账号服务且已登录。',
+        'support.scope': '仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。支持宿主账号免填 Key：需宿主提供账号服务且已登录。',
         'quiet.on': '免打扰 {s}–{e}，期间告警顺延、出窗合并推送。',
         'th.title': '告警阈值', 'th.warn': '预警阈值', 'th.critical': '告急阈值', 'th.save': '保存阈值',
         'th.saved': '阈值已保存，立即生效。', 'th.bad': '需为正数，且预警阈值大于告急阈值。',
         'th.hint': '低于预警值推「预警」，低于告急值推「告急」；充值或调阈值回到预警值之上推一条「恢复/解除」。告警未送达时静默取消，不补发。',
         'sec.push': '推送配置', 'push.channel': '推送通道：{c}', 'push.on': '已配置', 'push.off': '未配置',
+        'push.untested': '已配置，待测试', 'push.verified': '最近测试成功', 'push.failed': '最近测试失败',
+        'push.untestedHint': '通道已保存，但还没有测试过发送：点「发送测试推送」确认能收到，别等真告警时才发现地址不通。',
+        'push.verifiedAt': '最近测试成功：{t}',
+        'push.failedAt': '最近测试失败：{t}{e}',
+        'push.testStale': '测试期间推送配置已变更，本次结果未计入当前通道。',
+        'push.notPersisted': '结果未写入状态文件，重启后会丢失。',
         'chan.none': '未配置', 'chan.wecom': '企业微信', 'chan.dingtalk': '钉钉', 'chan.feishu': '飞书',
         'chan.bark': 'Bark', 'chan.serverchan': 'Server酱', 'chan.telegram': 'Telegram', 'chan.generic': '通用 Webhook',
         'push.hint': '低余额/恢复通知将推送到这里，保存即生效，无需重启。',
@@ -98,9 +104,9 @@ window.__ModuleLoader__.load({
         'hero.topup': 'Top up', 'hero.checkedAt': 'checked at {t}', 'hero.source': 'Official account source · no estimates',
         'level.normal': 'Balance OK', 'level.warn': 'Low balance', 'level.critical': 'Critical balance',
         'reason.title': 'Balance unavailable', 'reason.retry': 'Retry',
-        'reason.no-source': 'No host account service and no API key. Hosts with the official "Account & Balance" page need no key; otherwise set balance.apiKey in config or the DEEPSEEK_API_KEY env var.',
+        'reason.no-source': 'No host account service and no API key. Hosts with the official "Account & Balance" page support key-free accounts; otherwise set balance.apiKey in config or the DEEPSEEK_API_KEY env var.',
         'reason.signed-out': 'The host is not signed in to a DeepSeek account: sign in via the official "Account & Balance" page, then retry.',
-        'reason.unauthorized': 'API key invalid or expired: update the key, or sign in with the host account (no key).',
+        'reason.unauthorized': 'API key invalid or expired: update the key, or sign in with the host account (no key needed).',
         'reason.account-failed': 'Host account service query failed; retrying automatically.',
         'reason.account-error': 'Host account service call errored; retrying automatically.',
         'reason.network': 'Network unreachable: make sure this machine can reach api.deepseek.com (proxy/firewall?).',
@@ -111,12 +117,18 @@ window.__ModuleLoader__.load({
         'alert.pending': 'A "{k}" notice is waiting to be sent.', 'alert.hold': 'Alert delivery blocked: {e}', 'alert.retry': 'Retry send',
         'alert.retried': 'Retry triggered; sending immediately.',
         'monitor.off': 'Background monitoring is off (balance.enabled=false); the panel is display-only.',
-        'support.scope': 'Local DSH Desktop or local web host only: monitoring runs while DSH is running and stops when it exits; remote web panels are not supported. No-key mode needs the host account service and a signed-in account.',
+        'support.scope': 'Local DSH Desktop or local web host only: monitoring runs while DSH is running and stops when it exits; remote web panels are not supported. Key-free host accounts are supported: the host needs the account service and a signed-in account.',
         'quiet.on': 'Quiet hours {s}–{e}: alerts defer and merge into one push afterwards.',
         'th.title': 'Alert thresholds', 'th.warn': 'Warn below', 'th.critical': 'Critical below', 'th.save': 'Save thresholds',
         'th.saved': 'Thresholds saved; effective immediately.', 'th.bad': 'Positive numbers required, warn above critical.',
         'th.hint': 'Below warn pushes "low", below critical pushes "critical"; a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice. Undelivered alerts cancel silently.',
         'sec.push': 'Push settings', 'push.channel': 'Push channel: {c}', 'push.on': 'Configured', 'push.off': 'Not set',
+        'push.untested': 'Configured, not tested', 'push.verified': 'Last test succeeded', 'push.failed': 'Last test failed',
+        'push.untestedHint': 'The webhook is saved but has never been tested: hit "Send test push" now, so a dead endpoint cannot stay hidden until a real alert needs it.',
+        'push.verifiedAt': 'Last test succeeded: {t}',
+        'push.failedAt': 'Last test failed: {t}{e}',
+        'push.testStale': 'The push config changed while the test was running; this result was discarded.',
+        'push.notPersisted': 'Result not written to the state file; it will be lost on restart.',
         'chan.none': 'Not set', 'chan.wecom': 'WeCom', 'chan.dingtalk': 'DingTalk', 'chan.feishu': 'Feishu',
         'chan.bark': 'Bark', 'chan.serverchan': 'ServerChan', 'chan.telegram': 'Telegram', 'chan.generic': 'Generic webhook',
         'push.hint': 'Low-balance / recovery notices push here. Saving applies immediately, no restart.',
@@ -245,8 +257,13 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [result, setResultState] = useState(null)
       const [offConfirm, setOffConfirm] = useState(false)
-      const [warnDraft, setWarnDraft] = useState('')
-      const [critDraft, setCritDraft] = useState('')
+      // null = "still showing the host's value". The inputs render the threshold
+      // in that case instead of an empty string, so a slow /status, a remount, or
+      // any path where the seed never ran can no longer leave a blank field with
+      // a red "must be positive" warning under it.
+      const [warnDraft, setWarnDraft] = useState(null)
+      const [critDraft, setCritDraft] = useState(null)
+      const thTouched = useRef(false) // user typed in a threshold field
       const [toast, setToast] = useState(null)
 
       useEffect(() => {
@@ -300,8 +317,6 @@ window.__ModuleLoader__.load({
         let timer = null
         let attempt = 0
         let seeded = false
-        let lastWarn = null
-        let lastCrit = null
         const load = async () => {
           try {
             const res = await fetch(LOCAL_API + '/status', { headers: { Accept: 'application/json' } })
@@ -314,14 +329,16 @@ window.__ModuleLoader__.load({
             // must not re-open it under a user who just closed it.
             if (!seeded && !j.configured) setEditing(true)
             seeded = true
-            const tw = String(j.thresholds?.warn ?? 20)
-            const tc = String(j.thresholds?.critical ?? 5)
-            // Only refresh a draft that still shows the value we last served, so a
-            // background poll never overwrites thresholds the user is editing.
-            setWarnDraft((prev) => (lastWarn === null || prev === lastWarn ? tw : prev))
-            setCritDraft((prev) => (lastCrit === null || prev === lastCrit ? tc : prev))
-            lastWarn = tw
-            lastCrit = tc
+            // Refresh the draft only while the user has not typed in the field.
+            // This must be a synchronous ref read, not a functional setState that
+            // compares against a closure variable: React runs that updater later,
+            // so a variable written on the next line was already the new value and
+            // the comparison wrongly concluded "the user is editing" — which left
+            // both inputs empty on first load.
+            if (!thTouched.current) {
+              setWarnDraft(String(j.thresholds?.warn ?? 20))
+              setCritDraft(String(j.thresholds?.critical ?? 5))
+            }
           } catch (e) {
             if (cancelled) return
             if (attempt < 2) { attempt++; timer = setTimeout(load, attempt * 500); return }
@@ -374,15 +391,26 @@ window.__ModuleLoader__.load({
       }
       const refreshSoon = (ms = 400) => setTimeout(() => setNonce((n) => n + 1), ms)
 
+      // Shared by the standalone test button and the save+test flow. It owns no
+      // busy state on purpose: the caller keeps one busy window, so a failed save
+      // or a failed test can never leave a button stuck on "Saving…".
+      const sendTest = async () => {
+        const j = await post('/test-push')
+        // The config was repointed while this request was in flight, so the
+        // verdict belongs to a webhook that is no longer in use: say so instead
+        // of letting the user read it as the state of the current channel.
+        if (j.stale) { showResult({ ok: false, message: t('push.testStale') }); return j }
+        const warn = j.persisted === false ? t('push.notPersisted') : ''
+        showResult(j.ok
+          ? { ok: true, message: t('push.testOk', { c: j.channel || '', n: j.chunks || 1 }), hint: warn }
+          : { ok: false, message: j.message || j.error || '', hint: [j.hint, warn].filter(Boolean).join(' ') })
+        return j
+      }
+
       const testPush = async () => {
         setBusy('test'); showResult(null)
-        try {
-          const j = await post('/test-push')
-          showResult(j.ok
-            ? { ok: true, message: t('push.testOk', { c: j.channel || '', n: j.chunks || 1 }) }
-            : { ok: false, message: j.message || j.error || '', hint: j.hint || '' })
-        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
-        setBusy('')
+        try { await sendTest() } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
+        finally { setBusy('') }
       }
 
       const saveWebhook = async (thenTest) => {
@@ -390,14 +418,25 @@ window.__ModuleLoader__.load({
         try {
           const j = await post('/webhook', form)
           if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
-          setHost((prev) => ({ ...(prev || {}), channel: j.channel, configured: j.configured, urlHost: j.urlHost, secretSet: j.secretSet }))
+          // The server decides what happens to the old test result: an unchanged
+          // webhook keeps it, any edit drops it. Trust the response instead of
+          // blanking locally and flashing "untested" on a no-op re-save.
+          setHost((prev) => ({ ...(prev || {}), channel: j.channel, configured: j.configured, urlHost: j.urlHost, secretSet: j.secretSet, verify: j.verify ?? null }))
           setEditing(false)
           setForm({ channel: j.channel, url: '', secret: '' })
-          if (thenTest) { setBusy(''); return testPush() }
-          showResult({ ok: true, message: t('push.saved') })
+          if (!thenTest) {
+            showResult({ ok: true, message: t('push.saved') })
+            refreshSoon()
+            return
+          }
+          // Save succeeded and the user asked for a test: stay inside the same
+          // busy window (relabel to "sending") — never flash an enabled button
+          // between saving and testing.
+          setBusy('test')
+          await sendTest()
           refreshSoon()
         } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
-        setBusy('')
+        finally { setBusy('') }
       }
 
       const disablePush = async () => {
@@ -406,19 +445,21 @@ window.__ModuleLoader__.load({
         try {
           const j = await post('/webhook', { channel: 'none' })
           if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
-          setHost((prev) => ({ ...(prev || {}), channel: 'none', configured: false, urlHost: '', secretSet: false }))
+          setHost((prev) => ({ ...(prev || {}), channel: 'none', configured: false, urlHost: '', secretSet: false, verify: null }))
           setEditing(false)
           showResult({ ok: true, message: t('push.disabled') })
         } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
-        setBusy('')
+        finally { setBusy('') }
       }
 
       const savePrefs = async () => {
         setBusy('prefs'); showResult(null)
         try {
-          const j = await post('/prefs', { warn: Number(warnDraft), critical: Number(critDraft) })
+          const j = await post('/prefs', { warn: Number(warnShown), critical: Number(critShown) })
           if (!j.ok) { showResult({ ok: false, message: j.message || t('th.bad'), scope: 'th' }); return }
           setHost((prev) => (prev ? { ...prev, thresholds: j.thresholds } : prev))
+          // Saved values are now the host's values: let polls follow them again.
+          thTouched.current = false
           // Threshold saves confirm via the floating toast, so the card does not
           // grow a line (and push the sections below) just to take it away again.
           // Failures stay inline next to the inputs they refer to.
@@ -426,7 +467,7 @@ window.__ModuleLoader__.load({
           setToast({ ok: true, title: t('th.saved'), n: Date.now() })
           refreshSoon(900)
         } catch (e) { showResult({ ok: false, message: String(e?.message || e), scope: 'th' }) }
-        setBusy('')
+        finally { setBusy('') }
       }
 
       const retryAlert = async () => {
@@ -436,7 +477,7 @@ window.__ModuleLoader__.load({
           showResult(j.ok ? { ok: true, message: t('alert.retried') } : { ok: false, message: j.message || '' })
           refreshSoon()
         } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
-        setBusy('')
+        finally { setBusy('') }
       }
 
       const openForm = () => {
@@ -451,7 +492,10 @@ window.__ModuleLoader__.load({
       const level = host?.alert?.level || 'normal'
       const pending = host?.pending
       const th = host?.thresholds || { warn: 20, critical: 5 }
-      const warnN = Number(warnDraft), critN = Number(critDraft)
+      // An untouched draft shows the host value; only user typing replaces it.
+      const warnShown = warnDraft === null ? String(th.warn) : warnDraft
+      const critShown = critDraft === null ? String(th.critical) : critDraft
+      const warnN = Number(warnShown), critN = Number(critShown)
       const thValid = Number.isFinite(warnN) && Number.isFinite(critN) && warnN > 0 && critN > 0 && warnN > critN
       const thDirty = warnN !== th.warn || critN !== th.critical
 
@@ -526,11 +570,25 @@ window.__ModuleLoader__.load({
             onClick: () => saveWebhook(true),
           }, busy === 'test' ? t('push.testing') : busy === 'save' ? t('push.saving') : t('push.saveTest'))))
 
+      // "Configured" is not "connected": a stored webhook proves nothing until a
+      // test push comes back. Four states, and only a tested-good one is green —
+      // an old success is dropped server-side the moment the webhook changes.
+      const verifyInfo = host?.verify || null
+      const connState = !host?.configured ? 'off' : !verifyInfo ? 'untested' : verifyInfo.ok ? 'verified' : 'failed'
+      const connColor = connState === 'verified' ? T.success : connState === 'failed' ? T.error : connState === 'off' ? T.warn : T.sub
+      const connLine = connState === 'verified' ? t('push.verifiedAt', { t: fmtTime(verifyInfo.at) })
+          + (verifyInfo.persisted === false ? ' · ' + t('push.notPersisted') : '')
+        : connState === 'failed'
+          ? t('push.failedAt', { t: fmtTime(verifyInfo.at), e: verifyInfo.error ? (LANG === 'en' ? ': ' : '：') + verifyInfo.error : '' })
+            + (verifyInfo.persisted === false ? ' · ' + t('push.notPersisted') : '')
+          : connState === 'untested' ? t('push.untestedHint') : ''
+
       const pushSummary = () => h('div', { style: css.card },
         h('div', { style: css.row },
-          h('span', { style: css.cardTitle }, h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: host.configured ? T.success : T.warn, flex: 'none' } }), t('push.channel', { c: t('chan.' + host.channel) })),
-          h('span', { style: css.badgeSoft(host.configured ? T.success : T.warn) }, host.configured ? t('push.on') : t('push.off'))),
+          h('span', { style: css.cardTitle }, h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: connColor, flex: 'none' } }), t('push.channel', { c: t('chan.' + host.channel) })),
+          h('span', { style: css.badgeSoft(connColor) }, t('push.' + connState))),
         host.urlHost ? h('div', { style: css.metaDim }, t('push.current', { h: host.urlHost })) : null,
+        connLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? T.error : undefined } }, connLine) : null,
         h('div', { style: css.metaDim }, host.configured ? t('push.hint') : t('push.empty')),
         h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
           h('button', {
@@ -571,10 +629,10 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
             h('div', { style: { ...css.field, flex: 1, minWidth: 110 } },
               h('label', { style: css.fieldLabel, htmlFor: 'sentinel-warn' }, t('th.warn')),
-              h('input', { id: 'sentinel-warn', style: css.input, value: warnDraft, inputMode: 'decimal', onChange: (e) => setWarnDraft(e.target.value) })),
+              h('input', { id: 'sentinel-warn', style: css.input, value: warnShown, inputMode: 'decimal', onChange: (e) => { thTouched.current = true; setWarnDraft(e.target.value) } })),
             h('div', { style: { ...css.field, flex: 1, minWidth: 110 } },
               h('label', { style: css.fieldLabel, htmlFor: 'sentinel-crit' }, t('th.critical')),
-              h('input', { id: 'sentinel-crit', style: css.input, value: critDraft, inputMode: 'decimal', onChange: (e) => setCritDraft(e.target.value) }))),
+              h('input', { id: 'sentinel-crit', style: css.input, value: critShown, inputMode: 'decimal', onChange: (e) => { thTouched.current = true; setCritDraft(e.target.value) } }))),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
             h('button', { type: 'button', disabled: !!busy || !thValid || !thDirty, style: thValid && thDirty ? css.btnPrimary : { ...css.btnPrimary, opacity: 0.5, cursor: 'not-allowed' }, onClick: savePrefs }, t('th.save')),
             !thValid ? h('span', { style: { fontSize: 11.5 }, className: 'sentinel-th-bad' }, t('th.bad')) : null),

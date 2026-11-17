@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "余额哨兵",
-    "description": "DeepSeek 低余额主动推送到飞书/钉钉等 IM；仅支持本机 DSH Desktop／本机 Web，DSH 运行期间监控；带官方账号服务的宿主免填 API Key。"
+    "description": "DeepSeek 低余额主动推送到飞书/钉钉等 IM；仅支持本机 DSH Desktop／本机 Web，DSH 运行期间监控；支持宿主账号免填 API Key（需已登录）。"
   },
   "sub": "DeepSeek 余额监控 · 低余额主动提醒",
   "refresh": "刷新",
@@ -13,7 +13,7 @@
   "level.critical": "余额告急",
   "reason.title": "余额暂不可用",
   "reason.retry": "重试",
-  "reason.unauthorized": "API Key 无效或过期：请更新 Key，或改用宿主账号登录（免 Key）。",
+  "reason.unauthorized": "API Key 无效或过期：请更新 Key，或改用宿主账号登录（免填 Key）。",
   "reason.network": "网络不可达：确认本机能访问 api.deepseek.com（或被代理/防火墙拦截）。",
   "reason.http": "余额接口 HTTP {c}，稍后自动重试。",
   "banner": "监控中，通知未接通：配置通道后，低余额会自动推到你的 IM。",
@@ -28,7 +28,7 @@
   "alert.retry": "重试发送",
   "alert.retried": "已触发重试，立即补发。",
   "monitor.off": "后台监控已关闭（balance.enabled=false），面板仅展示。",
-  "support.scope": "仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。免 Key 需宿主提供账号服务且已登录。",
+  "support.scope": "仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。支持宿主账号免填 Key：需宿主提供账号服务且已登录。",
   "quiet.on": "免打扰 {s}–{e}，期间告警顺延、出窗合并推送。",
   "th.title": "告警阈值",
   "th.warn": "预警阈值",
