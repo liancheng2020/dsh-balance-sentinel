@@ -43,9 +43,10 @@ If the balance is already below a threshold when you connect, one current-state 
 
 ## How it works
 
-- **Two levels**: below 20 pushes "warn", below 5 pushes "critical" (account currency, panel-editable); back above warn pushes one "recovered".
-- **No spam**: same level never repeats; "recovered" only fires on a real top-up (10-min anti-flap cooldown); threshold tweaks or undelivered alerts cancel silently; quiet hours defer and merge into a single push afterwards.
-- **No loss**: pending alerts persist; business failures retry with 10-min backoff and hold after 3 (manual retry in the panel); ambiguous timeouts get one extra attempt then are marked unconfirmed; a newer transition always supersedes an old hold.
+- **Two levels**: below 20 pushes "warn", below 5 pushes "critical" (account currency, panel-editable); a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice, effective immediately on save.
+- **No spam**: same level never repeats; a real top-up pushes "recovered" (10-min anti-flap cooldown); a threshold tweak that resolves a delivered alert pushes "resolved" immediately; undelivered alerts cancel silently; quiet hours defer and merge into a single push afterwards.
+- **No loss**: pending alerts persist; business failures retry with 10-min backoff and hold after 3 (manual retry in the panel); timeouts / dead response bodies are "delivery unconfirmed": held immediately, never auto re-sent (manual retry in the panel); a failed state save writes a fallback receipt, and the next cycle, other instances, and restarts restore from it — a delivered transition counts as sent (no re-send), while "unconfirmed" is restored as held + ambiguous (never stamped as delivered), so the same alert is not auto re-sent; genuinely new transitions still fire and always supersede an old hold. If neither the state nor the receipt can be written, the duplicate risk is logged explicitly — dedup is not guaranteed in that case.
+- **No wedge**: host balance queries have a 15s deadline (a never-settling host promise cannot stall polling); the scheduler continues after any query/notify/save exception.
 - **Multi-instance safe**: desktop + web sharing `DSH_HOME` push each transition exactly once (whole-cycle lock + disk merge).
 - **Channels**: WeCom / DingTalk / Feishu (card) / Bark / ServerChan / Telegram / generic webhook; auto-chunking; HTTP-200 business failures count as failures.
 - Balance is the **official account number**; v1 ships no cost estimates.
@@ -65,7 +66,7 @@ If the balance is already below a threshold when you connect, one current-state 
       quiet: { start: "", end: "" }  # e.g. "23:00"–"08:00"
       apiKey: ""                   # fallback for older hosts only
     notify:
-      signature: true              # short "via 余额哨兵" line, opt-out
+      signature: true              # "via 余额哨兵 · install: github:…" line, opt-out
       signatureText: ""
     localApi:
       enabled: true                # panel bridge on 127.0.0.1:17430

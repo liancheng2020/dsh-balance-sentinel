@@ -55,13 +55,14 @@ window.__ModuleLoader__.load({
         'reason.bad-response': '余额接口返回异常，稍后自动重试。',
         'reason.http': '余额接口 HTTP {c}，稍后自动重试。',
         'banner': '监控中，通知未接通：配置通道后，低余额会自动推到你的 IM。', 'bannerCta': '现在配置',
-        'kind.warn': '预警', 'kind.critical': '告急', 'kind.recovered': '恢复', 'kind.current': '当前状态',
+        'kind.warn': '预警', 'kind.critical': '告急', 'kind.recovered': '恢复', 'kind.resolved': '解除', 'kind.current': '当前状态',
         'alert.pending': '有一条「{k}」通知待发送。', 'alert.hold': '告警发送受阻：{e}', 'alert.retry': '重试发送',
+        'alert.retried': '已触发重试，立即补发。',
         'monitor.off': '后台监控已关闭（balance.enabled=false），面板仅展示。',
         'quiet.on': '免打扰 {s}–{e}，期间告警顺延、出窗合并推送。',
         'th.title': '告警阈值', 'th.warn': '预警阈值', 'th.critical': '告急阈值', 'th.save': '保存阈值',
-        'th.saved': '阈值已保存，下一轮生效。', 'th.bad': '需为正数，且预警阈值大于告急阈值。',
-        'th.hint': '低于预警值推「预警」，低于告急值推「告急」；充值回到预警值之上推一条「恢复」。调阈值或告警未送达时静默取消，不补发。',
+        'th.saved': '阈值已保存，立即生效。', 'th.bad': '需为正数，且预警阈值大于告急阈值。',
+        'th.hint': '低于预警值推「预警」，低于告急值推「告急」；充值或调阈值回到预警值之上推一条「恢复/解除」。告警未送达时静默取消，不补发。',
         'sec.push': '推送配置', 'push.channel': '推送通道：{c}', 'push.on': '已配置', 'push.off': '未配置',
         'chan.none': '未配置', 'chan.wecom': '企业微信', 'chan.dingtalk': '钉钉', 'chan.feishu': '飞书',
         'chan.bark': 'Bark', 'chan.serverchan': 'Server酱', 'chan.telegram': 'Telegram', 'chan.generic': '通用 Webhook',
@@ -71,7 +72,7 @@ window.__ModuleLoader__.load({
         'push.field.channel': '推送通道', 'push.field.url': 'Webhook 地址', 'push.field.token': 'Bot Token',
         'push.field.secret': '加签密钥（可选）', 'push.field.chat': 'chat_id',
         'push.saveTest': '保存并发送测试', 'push.save': '仅保存', 'push.saving': '保存中…',
-        'push.edit': '修改', 'push.cancel': '取消', 'push.saved': '已保存，下一轮推送即生效。',
+        'push.edit': '修改', 'push.cancel': '取消', 'push.saved': '已保存，立即生效。',
         'push.disable': '关闭推送', 'push.disableConfirm': '确认关闭？', 'push.disabled': '已关闭推送，可随时重新配置。',
         'push.test': '发送测试推送', 'push.testing': '发送中…',
         'push.testOk': '测试推送成功：{c} 通道正常，发出 {n} 条。',
@@ -95,13 +96,14 @@ window.__ModuleLoader__.load({
         'reason.bad-response': 'Unexpected balance API response; retrying automatically.',
         'reason.http': 'Balance API HTTP {c}; retrying automatically.',
         'banner': 'Watching, but notifications are not connected: set a channel and low balance will push to your IM.', 'bannerCta': 'Set it up',
-        'kind.warn': 'low', 'kind.critical': 'critical', 'kind.recovered': 'recovered', 'kind.current': 'current state',
+        'kind.warn': 'low', 'kind.critical': 'critical', 'kind.recovered': 'recovered', 'kind.resolved': 'resolved', 'kind.current': 'current state',
         'alert.pending': 'A "{k}" notice is waiting to be sent.', 'alert.hold': 'Alert delivery blocked: {e}', 'alert.retry': 'Retry send',
+        'alert.retried': 'Retry triggered; sending immediately.',
         'monitor.off': 'Background monitoring is off (balance.enabled=false); the panel is display-only.',
         'quiet.on': 'Quiet hours {s}–{e}: alerts defer and merge into one push afterwards.',
         'th.title': 'Alert thresholds', 'th.warn': 'Warn below', 'th.critical': 'Critical below', 'th.save': 'Save thresholds',
-        'th.saved': 'Thresholds saved; effective next cycle.', 'th.bad': 'Positive numbers required, warn above critical.',
-        'th.hint': 'Below warn pushes "low", below critical pushes "critical"; a top-up back above warn pushes one "recovered". Threshold tweaks or undelivered alerts cancel silently.',
+        'th.saved': 'Thresholds saved; effective immediately.', 'th.bad': 'Positive numbers required, warn above critical.',
+        'th.hint': 'Below warn pushes "low", below critical pushes "critical"; a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice. Undelivered alerts cancel silently.',
         'sec.push': 'Push settings', 'push.channel': 'Push channel: {c}', 'push.on': 'Configured', 'push.off': 'Not set',
         'chan.none': 'Not set', 'chan.wecom': 'WeCom', 'chan.dingtalk': 'DingTalk', 'chan.feishu': 'Feishu',
         'chan.bark': 'Bark', 'chan.serverchan': 'ServerChan', 'chan.telegram': 'Telegram', 'chan.generic': 'Generic webhook',
@@ -111,7 +113,7 @@ window.__ModuleLoader__.load({
         'push.field.channel': 'Channel', 'push.field.url': 'Webhook URL', 'push.field.token': 'Bot Token',
         'push.field.secret': 'Sign secret (optional)', 'push.field.chat': 'chat_id',
         'push.saveTest': 'Save and send test', 'push.save': 'Save only', 'push.saving': 'Saving…',
-        'push.edit': 'Edit', 'push.cancel': 'Cancel', 'push.saved': 'Saved; applies from the next push.',
+        'push.edit': 'Edit', 'push.cancel': 'Cancel', 'push.saved': 'Saved; effective immediately.',
         'push.disable': 'Turn off', 'push.disableConfirm': 'Confirm?', 'push.disabled': 'Push turned off; configure it again anytime.',
         'push.test': 'Send test push', 'push.testing': 'Sending…',
         'push.testOk': 'Test push via {c} succeeded, {n} message(s) sent.',
@@ -251,6 +253,9 @@ window.__ModuleLoader__.load({
           .sentinel-toast-body { min-width: 0; }
           .sentinel-toast-title { font-weight: 650; }
           .sentinel-toast-sub { font-size: 12.5px; color: ${T.sub}; word-break: break-word; }
+          /* fixed red: some skins tint --dsw-alias-state-error-primary pink */
+          .sentinel-th-bad { color: #ff4d4f; }
+          @media (prefers-color-scheme: light) { .sentinel-th-bad { color: #d93025; } }
           @media (prefers-reduced-motion: reduce) { .sentinel-toast { animation: none !important; } }
         `
         let el = document.getElementById('sentinel-style')
@@ -312,7 +317,7 @@ window.__ModuleLoader__.load({
           : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         return res.json()
       }
-      const refreshSoon = () => setTimeout(() => setNonce((n) => n + 1), 400)
+      const refreshSoon = (ms = 400) => setTimeout(() => setNonce((n) => n + 1), ms)
 
       const testPush = async () => {
         setBusy('test'); setResult(null)
@@ -357,10 +362,11 @@ window.__ModuleLoader__.load({
         setBusy('prefs'); setResult(null)
         try {
           const j = await post('/prefs', { warn: Number(warnDraft), critical: Number(critDraft) })
-          if (!j.ok) { setResult({ ok: false, message: j.message || t('th.bad') }); return }
+          if (!j.ok) { setResult({ ok: false, message: j.message || t('th.bad'), scope: 'th' }); return }
           setHost((prev) => (prev ? { ...prev, thresholds: j.thresholds } : prev))
-          setResult({ ok: true, message: t('th.saved') })
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
+          setResult({ ok: true, message: t('th.saved'), scope: 'th' })
+          refreshSoon(900)
+        } catch (e) { setResult({ ok: false, message: String(e?.message || e), scope: 'th' }) }
         setBusy('')
       }
 
@@ -368,7 +374,7 @@ window.__ModuleLoader__.load({
         setBusy('retry'); setResult(null)
         try {
           const j = await post('/alert/retry')
-          setResult(j.ok ? { ok: true, message: t('push.saved') } : { ok: false, message: j.message || '' })
+          setResult(j.ok ? { ok: true, message: t('alert.retried') } : { ok: false, message: j.message || '' })
           refreshSoon()
         } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
         setBusy('')
@@ -463,6 +469,10 @@ window.__ModuleLoader__.load({
           }, busy === 'test' ? t('push.testing') : t('push.test')),
           h('button', { type: 'button', disabled: !!busy, className: 'sentinel-btn', style: host.configured ? css.btnOutline : css.btn, onClick: openForm }, host.configured ? t('push.edit') : t('push.save'))))
 
+      const resultBlock = (r, extra) => h('div', { style: { marginTop: 8, ...extra } },
+        h('div', { style: { color: r.ok ? T.success : T.error, fontSize: 12 } }, r.message),
+        r.hint ? h('div', { style: { ...css.metaDim, marginTop: 4 } }, r.hint) : null)
+
       return h('div', { style: css.panel, className: 'sentinel-panel' },
         h('div', { style: css.head },
           h('div', { style: css.titleWrap },
@@ -480,7 +490,7 @@ window.__ModuleLoader__.load({
         host && !host.enabled ? h('div', { style: css.warnBox }, t('monitor.off')) : null,
         host && host.quiet?.start ? h('div', { style: css.metaDim }, t('quiet.on', { s: host.quiet.start, e: host.quiet.end })) : null,
         pending ? h('div', { style: pending.hold ? css.warnBox : css.metaDim },
-          pending.hold ? t('alert.hold', { e: pending.lastError || '' }) : t('alert.pending', { k: t('kind.' + pending.kind) }),
+          pending.hold ? t('alert.hold', { e: pending.lastError || '' }) : t('alert.pending', { k: pending.kind === 'recovered' && pending.cause === 'threshold' ? t('kind.resolved') : t('kind.' + pending.kind) }),
           pending.hold ? h('button', { type: 'button', style: { ...css.btn, marginLeft: 8 }, disabled: !!busy, onClick: retryAlert }, t('alert.retry')) : null) : null,
 
         host ? h('div', { style: css.card },
@@ -494,8 +504,9 @@ window.__ModuleLoader__.load({
               h('input', { id: 'sentinel-crit', style: css.input, value: critDraft, inputMode: 'decimal', onChange: (e) => setCritDraft(e.target.value) }))),
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
             h('button', { type: 'button', disabled: !!busy || !thValid || !thDirty, style: thValid && thDirty ? css.btnPrimary : { ...css.btnPrimary, opacity: 0.5, cursor: 'not-allowed' }, onClick: savePrefs }, t('th.save')),
-            !thValid ? h('span', { style: { color: T.error, fontSize: 11.5 } }, t('th.bad')) : null),
+            !thValid ? h('span', { style: { fontSize: 11.5 }, className: 'sentinel-th-bad' }, t('th.bad')) : null),
           h('div', { style: { ...css.metaDim, marginTop: 8 } }, t('th.hint'))) : null,
+        result && result.scope === 'th' ? resultBlock(result, { marginBottom: 12 }) : null,
 
         h('div', { id: 'sentinel-push' },
           h('div', { style: css.h2 }, t('sec.push')),
@@ -509,9 +520,7 @@ window.__ModuleLoader__.load({
               h('button', { type: 'button', style: css.btn, onClick: copySnippet }, t('bridge.snippet'))))
             : h('div', null, editing ? pushForm() : pushSummary())),
 
-        result ? h('div', { style: { marginTop: 8 } },
-          h('div', { style: { color: result.ok ? T.success : T.error, fontSize: 12 } }, result.message),
-          result.hint ? h('div', { style: { ...css.metaDim, marginTop: 4 } }, result.hint) : null) : null,
+        result && result.scope !== 'th' ? resultBlock(result) : null,
 
         h('div', { style: css.foot },
           t('foot.source'), h('a', { style: css.link, className: 'sentinel-link', href: TOP_UP, target: '_blank', rel: 'noreferrer' }, 'DeepSeek', h('span', null, '↗')),

@@ -199,6 +199,13 @@ await atest('P5 thresholds: invalid blocked, valid dirty saves', async () => {
   await save.props.onClick()
   await sleep(30)
   if (!posts.some(([p, b]) => p === 'prefs' && b.warn === 30 && b.critical === 8)) throw new Error('prefs not posted')
+  node = render()
+  const flat = [...walk(node)]
+  const iTh = flat.findIndex((n) => n.text === '告警阈值')
+  const iSaved = flat.findIndex((n) => n.text && n.text.includes('阈值已保存'))
+  const iPush = flat.findIndex((n) => n.text === '推送配置')
+  if (!(iTh > -1 && iSaved > iTh && iPush > iSaved)) throw new Error('saved message must sit below threshold card, above push section')
+  if (!flat[iSaved].text.includes('立即生效')) throw new Error('saved message must say immediate, not next cycle')
   dispose()
 })
 await atest('P6 shortest path: paste url -> save&test -> success', async () => {
@@ -215,6 +222,10 @@ await atest('P6 shortest path: paste url -> save&test -> success', async () => {
   node = render()
   if (!posts.some(([p]) => p === 'webhook') || !posts.some(([p]) => p === 'test-push')) throw new Error('save/test not posted')
   if (!textOf(node).includes('测试推送成功')) throw new Error('no success feedback')
+  const flat = [...walk(node)]
+  const iPush = flat.findIndex((n) => n.text === '推送配置')
+  const iOk = flat.findIndex((n) => n.text && n.text.includes('测试推送成功'))
+  if (!(iPush > -1 && iOk > iPush)) throw new Error('push feedback must stay below push section')
   dispose()
 })
 await atest('P7 en: full English, no Chinese residue', async () => {
@@ -243,6 +254,15 @@ await atest('P9 monitor off + quiet hours lines', async () => {
   await sleep(30)
   const txt = textOf(render())
   if (!txt.includes('后台监控已关闭') || !txt.includes('免打扰')) throw new Error(txt.slice(0, 300))
+  dispose()
+})
+await atest('P10 threshold-resolved pending shows 解除 label', async () => {
+  resetHost(); HOST.pending = { kind: 'recovered', cause: 'threshold', hold: false, ambiguous: false, attempts: 0, lastError: null }
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  const txt = textOf(render())
+  if (!txt.includes('「解除」通知待发送')) throw new Error(txt.slice(0, 300))
   dispose()
 })
 
