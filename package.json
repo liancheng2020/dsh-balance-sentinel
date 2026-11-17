@@ -1,6 +1,6 @@
 {
   "name": "dsh-balance-sentinel",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "DeepSeek 低余额主动推送到飞书/钉钉等 IM；仅限本机 DSH Desktop／本机 Web，DSH 运行期间监控；支持宿主账号免填 API Key（需已登录）。",
   "author": "liancheng2020",
   "type": "module",
