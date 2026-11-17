@@ -9,13 +9,18 @@
 [![license](https://img.shields.io/npm/l/dsh-balance-sentinel.svg)](LICENSE)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.1--rc.2-4B6EF5)](https://github.com/liancheng2020/dsh-balance-sentinel#readme)
 
-**DeepSeek balance running low? Get alerted in Feishu / DingTalk / your IM automatically.** Background monitoring that comes to you — not another balance badge you have to watch. **No API key to paste** on DSH hosts with the built-in account service.
+**DeepSeek balance running low? Get alerted in Feishu / DingTalk automatically.** Background monitoring that comes to you; **no API key to paste** on hosts with the built-in account service (sign-in required).
 
-**What a real alert looks like** (Feishu card: critical red / warn orange / recovered green) and the panel:
+> **Three lines first**
+> - Local DSH Desktop / local web host, **monitored only while DSH runs**; no remote web panel
+> - Low balance pushes to Feishu / DingTalk; a top-up or threshold change sends one "recovered"/"resolved"
+> - Paste a webhook in the panel → **Save and send test**; effective on save, one restart after install
 
-| Low-balance alert push | Panel: balance + thresholds + channel |
+**What you get** (the panel) and **a real alert** (Feishu card: critical red / warn orange / recovered green):
+
+| Panel: balance + thresholds + channel | Low-balance alert push |
 |---|---|
-| ![Feishu low-balance alert card](assets/alert-feishu.png) | ![Balance Sentinel panel: official balance, thresholds, push settings](assets/panel-balance.png) |
+| ![Balance Sentinel panel: official balance, thresholds, push settings](assets/panel-balance.png) | ![Feishu low-balance alert card](assets/alert-feishu.png) |
 
 ## Install
 
@@ -32,19 +37,16 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 
 Desktop app: Settings → Plugins → add `dsh-balance-sentinel`. Restart DSH once.
 
-**Compatibility (the no-key boundary)**: no-key relies on the host's built-in account service (same source as the official "Account & Balance" page; **a signed-in DeepSeek account is required** — no key ≠ no account). Verified on the current desktop host; older hosts fall back to the `DEEPSEEK_API_KEY` env var or `balance.apiKey` config, and if neither exists the panel states the exact reason instead of failing silently.
+## Support boundary
 
-## Support boundary (read before installing)
+- **Local DSH Desktop / local web host**: monitoring runs inside the DSH process — quit DSH and it stops; reopening resumes from the local state file.
+- **No remote web panel**: the panel uses the loopback bridge on `127.0.0.1:17430`, which only accepts pages from this machine.
+- **No key needs the host account service and a signed-in DeepSeek account** (no key ≠ no account); otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey` — with neither, the panel states the exact reason.
 
-- **Hosts**: the local **DSH Desktop** and the local **Web** host (`dsh plugin --profile web add …`, then open the web panel on the same machine). Requires DSH ≥ `0.2.1-rc.2`, Node ≥ 18.
-- **Monitored only while DSH runs**: polling, decisions and pushes all live inside the DSH process. Quit or close DSH and monitoring stops — no more balance queries, no more pushes. Reopening DSH resumes from the local state file; nothing needs reconfiguring.
-- **No remote web panel**: the panel reads and writes state through the loopback bridge on `127.0.0.1:17430`, which only accepts pages from this machine. Exposing the bridge/panel to other machines, or opening the web panel from another machine, is out of scope (the panel reports that it cannot reach the host).
-- **No-key boundary**: needs the host's built-in account service **with a signed-in DeepSeek account**; otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey`. No key ≠ no account.
+## First use (two steps)
 
-## First use (two steps to connected)
-
-1. Open the **Balance Sentinel** panel: your real balance immediately, or a clear unavailable reason (signed out / no account service / network…).
-2. In "Push settings", pick a channel and paste a webhook URL (channel auto-detected) → **Save and send test** → success means connected. The Feishu/DingTalk form includes "How to get a bot webhook": the official doc, the three-click path, and the security settings that channel actually supports (DingTalk sign secret can be pasted; Feishu receives message cards and signature verification is not implemented, so leave it off). Monitoring is on by default; **until a channel is saved it watches without pushing**, and a banner says so.
+1. Open the **Balance Sentinel** panel: your real balance immediately, or a clear reason (signed out / no account service / network…).
+2. Pick a channel, paste the webhook (auto-detected) → **Save and send test**. The Feishu/DingTalk form includes "How to get a bot webhook": official doc + three-step path + the security settings that channel supports. **Until a channel is saved it watches without pushing**.
 
 If the balance is already below a threshold when you connect, one current-state notice is sent (once).
 
@@ -52,9 +54,8 @@ If the balance is already below a threshold when you connect, one current-state 
 
 - **Two levels**: below 20 pushes "warn", below 5 pushes "critical" (account currency, panel-editable); a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice, effective immediately on save.
 - **No spam**: same level never repeats; a real top-up pushes "recovered" (10-min anti-flap cooldown); a threshold tweak that resolves a delivered alert pushes "resolved" immediately; undelivered alerts cancel silently; quiet hours defer and merge into a single push afterwards.
-- **No loss**: pending alerts persist; business failures retry with 10-min backoff and hold after 3 (manual retry in the panel); timeouts / dead response bodies are "delivery unconfirmed": held immediately, never auto re-sent (manual retry in the panel); a failed state save writes a fallback receipt, and the next cycle, other instances, and restarts restore from it — a delivered transition counts as sent (no re-send), while "unconfirmed" is restored as held + ambiguous (never stamped as delivered), so the same alert is not auto re-sent; genuinely new transitions still fire and always supersede an old hold. If neither the state nor the receipt can be written, the duplicate risk is logged explicitly — dedup is not guaranteed in that case.
-- **No wedge**: host balance queries have a 15s deadline (a never-settling host promise cannot stall polling); the scheduler continues after any query/notify/save exception.
-- **Multi-instance safe**: desktop + web sharing `DSH_HOME` push each transition exactly once (whole-cycle lock + disk merge).
+- **No loss**: pending alerts persist; business failures back off 10 min and hold after 3 (manual retry in the panel); timeouts and dead response bodies are "delivery unconfirmed" — held immediately, never auto re-sent; a failed state save writes a fallback receipt, so restarts and multiple instances still do not re-send it (unconfirmed restores as held, never as sent). If neither the state nor the receipt can be written, the duplicate risk is logged explicitly.
+- **No wedge, no duplicate across instances**: host queries have a 15s deadline and the scheduler survives any exception; desktop + web sharing `DSH_HOME` push each transition exactly once (whole-cycle lock + disk merge).
 - **Channels**: WeCom / DingTalk / Feishu (card) / Bark / ServerChan / Telegram / generic webhook; auto-chunking; HTTP-200 business failures count as failures.
 - Balance is the **official account number**; v1 ships no cost estimates.
 
@@ -84,9 +85,7 @@ Thresholds and channel are also editable in the panel; saving applies without a 
 ## Privacy & compliance
 
 - State and webhook live only in `$DSH_HOME/balance-sentinel/` (dir 0700). **No uploads, no telemetry by default.**
-- The bridge binds 127.0.0.1 only, rejects cross-site origins, and never exposes the webhook url/secret.
-- Balance queries use the host account service or the official DeepSeek `/user/balance` API, ≥60s interval, backoff on failure.
-- MIT licensed.
+- The bridge binds 127.0.0.1 only, rejects cross-site origins and never exposes the webhook url/secret; balance queries use the host account service or the official `/user/balance` API, ≥60s interval, backoff on failure. MIT licensed.
 
 ## Feedback
 

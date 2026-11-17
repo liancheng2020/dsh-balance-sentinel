@@ -1,7 +1,0 @@
-url: https://github.com/liancheng2020/dsh-balance-sentinel
-name: liancheng2020/dsh-balance-sentinel
-category: notify
-description:
-  en: 'Pushes DeepSeek low-balance and recovery alerts to Feishu, DingTalk or other IM webhooks; runs on the local DSH desktop or local web host and monitors only while DSH is running.'
-  zh: 'DeepSeek 余额低于阈值时主动推送到飞书、钉钉等 IM，并推送恢复通知；仅支持本机 DSH Desktop／本机 Web，DSH 运行期间才监控。'
-icon: https://raw.githubusercontent.com/liancheng2020/dsh-balance-sentinel/main/assets/icon-180.png
