@@ -1,0 +1,5 @@
+# dsh bundle patch: inserts the balance sentinel plugin into a profile's layer stack.
+- insert:
+    - id: balance-sentinel
+      name: dsh-balance-sentinel
+      config: {}
