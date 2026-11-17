@@ -7,11 +7,13 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const { useState, useEffect } = React
+    const { useState, useEffect, useRef } = React
 
     const LOCAL_API = 'http://127.0.0.1:17430'
     const REPO = 'https://github.com/liancheng2020/dsh-balance-sentinel'
     const TOP_UP = 'https://platform.deepseek.com/'
+    const RESULT_TTL = 3000 // confirmations fade; failures stay until the next action
+    const POLL_MS = 15000 // panel refresh; the bridge is loopback-only and cheap
     // Official "how to get a custom bot webhook" pages, shown next to the form.
     const BOT_DOC = {
       feishu: 'https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot',
@@ -186,14 +188,12 @@ window.__ModuleLoader__.load({
       btnPrimary: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(91,140,255,0.45)', background: 'rgba(91,140,255,0.16)', color: T.brand, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
       hero: { background: `linear-gradient(135deg, rgba(91,140,255,0.10), ${T.layer1} 60%)`, border: `1px solid ${T.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 },
       heroVal: { fontSize: 30, fontWeight: 700, lineHeight: 1.2 },
-      meta: { fontSize: 12, color: T.sub, margin: '2px 0' },
       metaDim: { fontSize: 11.5, color: T.tertiary, margin: '2px 0' },
       banner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 10, border: `1px solid ${T.borderSoft}`, borderLeft: `3px solid ${T.brand}`, background: 'rgba(91,140,255,0.10)' },
       bannerText: { fontSize: 12, color: T.sub },
       card: { background: T.layer1, border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 },
       row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 },
       cardTitle: { fontWeight: 600, fontSize: 13, color: T.text, display: 'flex', alignItems: 'center', gap: 7 },
-      badge: (c) => ({ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: c, color: '#0e0e11', whiteSpace: 'nowrap', flex: 'none' }),
       badgeSoft: (c) => ({ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, color: c, border: `1px solid ${c}`, background: 'transparent', whiteSpace: 'nowrap', flex: 'none' }),
       field: { marginBottom: 9 },
       fieldLabel: { display: 'block', fontSize: 11.5, color: T.tertiary, marginBottom: 4 },
@@ -229,7 +229,9 @@ window.__ModuleLoader__.load({
     }
 
     const sym = (c) => (c === 'USD' ? '$' : '¥')
-    const levelColor = (l) => l === 'critical' ? T.error : l === 'warn' ? T.warn : T.success
+    // Critical uses a fixed red: some skins tint --dsw-alias-state-error-primary
+    // pink, which turned a real 告急 amount into a near-white number.
+    const levelColor = (l) => l === 'critical' ? '#ff4d4f' : l === 'warn' ? T.warn : T.success
     const fmtTime = (iso) => { if (!iso) return ''; try { return new Date(iso).toLocaleTimeString(LANG === 'en' ? 'en-US' : 'zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) } catch { return String(iso) } }
 
     function SentinelPanel() {
@@ -241,7 +243,7 @@ window.__ModuleLoader__.load({
       const [editing, setEditing] = useState(false)
       const [form, setForm] = useState({ channel: 'wecom', url: '', secret: '' })
       const [busy, setBusy] = useState('')
-      const [result, setResult] = useState(null)
+      const [result, setResultState] = useState(null)
       const [offConfirm, setOffConfirm] = useState(false)
       const [warnDraft, setWarnDraft] = useState('')
       const [critDraft, setCritDraft] = useState('')
@@ -252,6 +254,18 @@ window.__ModuleLoader__.load({
         const id = setTimeout(() => setToast(null), 2000)
         return () => clearTimeout(id)
       }, [toast])
+
+      // Inline result: a confirmation ("saved") is noise a few seconds later, so it
+      // fades on its own; failures stay until the next action so they can be read.
+      // Every write goes through showResult, which also cancels a pending fade so a
+      // stale timer can never wipe a newer (possibly error) message.
+      const resultTimer = useRef(null)
+      useEffect(() => () => clearTimeout(resultTimer.current), [])
+      const showResult = (r) => {
+        clearTimeout(resultTimer.current)
+        resultTimer.current = r && r.ok ? setTimeout(() => setResultState(null), RESULT_TTL) : null
+        setResultState(r)
+      }
 
       useEffect(() => {
         const sheet = `
@@ -285,16 +299,29 @@ window.__ModuleLoader__.load({
         let cancelled = false
         let timer = null
         let attempt = 0
+        let seeded = false
+        let lastWarn = null
+        let lastCrit = null
         const load = async () => {
           try {
             const res = await fetch(LOCAL_API + '/status', { headers: { Accept: 'application/json' } })
             if (!res.ok) throw new Error('http ' + res.status)
             const j = await res.json()
             if (cancelled) return
+            attempt = 0
             setBridgeErr(''); setHost(j)
-            if (!j.configured) setEditing(true)
-            setWarnDraft(String(j.thresholds?.warn ?? 20))
-            setCritDraft(String(j.thresholds?.critical ?? 5))
+            // Auto-open the setup form once, not on every poll: a later refresh
+            // must not re-open it under a user who just closed it.
+            if (!seeded && !j.configured) setEditing(true)
+            seeded = true
+            const tw = String(j.thresholds?.warn ?? 20)
+            const tc = String(j.thresholds?.critical ?? 5)
+            // Only refresh a draft that still shows the value we last served, so a
+            // background poll never overwrites thresholds the user is editing.
+            setWarnDraft((prev) => (lastWarn === null || prev === lastWarn ? tw : prev))
+            setCritDraft((prev) => (lastCrit === null || prev === lastCrit ? tc : prev))
+            lastWarn = tw
+            lastCrit = tc
           } catch (e) {
             if (cancelled) return
             if (attempt < 2) { attempt++; timer = setTimeout(load, attempt * 500); return }
@@ -302,7 +329,21 @@ window.__ModuleLoader__.load({
           }
         }
         load()
-        return () => { cancelled = true; if (timer) clearTimeout(timer) }
+        // The panel is a live view: without this it keeps showing "pending" long
+        // after the monitor delivered the alert. Polls pause while hidden.
+        const tick = () => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+          load()
+        }
+        const id = setInterval(tick, POLL_MS)
+        const onVisible = () => { if (document.visibilityState !== 'hidden') load() }
+        if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', onVisible)
+        return () => {
+          cancelled = true
+          if (timer) clearTimeout(timer)
+          clearInterval(id)
+          if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('visibilitychange', onVisible)
+        }
       }, [nonce, retry])
 
       const copyText = (text) => new Promise((resolve) => {
@@ -334,69 +375,73 @@ window.__ModuleLoader__.load({
       const refreshSoon = (ms = 400) => setTimeout(() => setNonce((n) => n + 1), ms)
 
       const testPush = async () => {
-        setBusy('test'); setResult(null)
+        setBusy('test'); showResult(null)
         try {
           const j = await post('/test-push')
-          setResult(j.ok
+          showResult(j.ok
             ? { ok: true, message: t('push.testOk', { c: j.channel || '', n: j.chunks || 1 }) }
             : { ok: false, message: j.message || j.error || '', hint: j.hint || '' })
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
         setBusy('')
       }
 
       const saveWebhook = async (thenTest) => {
-        setBusy('save'); setResult(null)
+        setBusy('save'); showResult(null)
         try {
           const j = await post('/webhook', form)
-          if (!j.ok) { setResult({ ok: false, message: j.message || '' }); return }
+          if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
           setHost((prev) => ({ ...(prev || {}), channel: j.channel, configured: j.configured, urlHost: j.urlHost, secretSet: j.secretSet }))
           setEditing(false)
           setForm({ channel: j.channel, url: '', secret: '' })
           if (thenTest) { setBusy(''); return testPush() }
-          setResult({ ok: true, message: t('push.saved') })
+          showResult({ ok: true, message: t('push.saved') })
           refreshSoon()
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
         setBusy('')
       }
 
       const disablePush = async () => {
         if (!offConfirm) { setOffConfirm(true); return }
-        setOffConfirm(false); setBusy('save'); setResult(null)
+        setOffConfirm(false); setBusy('save'); showResult(null)
         try {
           const j = await post('/webhook', { channel: 'none' })
-          if (!j.ok) { setResult({ ok: false, message: j.message || '' }); return }
+          if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
           setHost((prev) => ({ ...(prev || {}), channel: 'none', configured: false, urlHost: '', secretSet: false }))
           setEditing(false)
-          setResult({ ok: true, message: t('push.disabled') })
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
+          showResult({ ok: true, message: t('push.disabled') })
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
         setBusy('')
       }
 
       const savePrefs = async () => {
-        setBusy('prefs'); setResult(null)
+        setBusy('prefs'); showResult(null)
         try {
           const j = await post('/prefs', { warn: Number(warnDraft), critical: Number(critDraft) })
-          if (!j.ok) { setResult({ ok: false, message: j.message || t('th.bad'), scope: 'th' }); return }
+          if (!j.ok) { showResult({ ok: false, message: j.message || t('th.bad'), scope: 'th' }); return }
           setHost((prev) => (prev ? { ...prev, thresholds: j.thresholds } : prev))
-          setResult({ ok: true, message: t('th.saved'), scope: 'th' })
+          // Threshold saves confirm via the floating toast, so the card does not
+          // grow a line (and push the sections below) just to take it away again.
+          // Failures stay inline next to the inputs they refer to.
+          showResult(null)
+          setToast({ ok: true, title: t('th.saved'), n: Date.now() })
           refreshSoon(900)
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e), scope: 'th' }) }
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e), scope: 'th' }) }
         setBusy('')
       }
 
       const retryAlert = async () => {
-        setBusy('retry'); setResult(null)
+        setBusy('retry'); showResult(null)
         try {
           const j = await post('/alert/retry')
-          setResult(j.ok ? { ok: true, message: t('alert.retried') } : { ok: false, message: j.message || '' })
+          showResult(j.ok ? { ok: true, message: t('alert.retried') } : { ok: false, message: j.message || '' })
           refreshSoon()
-        } catch (e) { setResult({ ok: false, message: String(e?.message || e) }) }
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
         setBusy('')
       }
 
       const openForm = () => {
         setForm({ channel: host?.channel && host.channel !== 'none' ? host.channel : 'wecom', url: '', secret: '' })
-        setResult(null); setOffConfirm(false); setEditing(true)
+        showResult(null); setOffConfirm(false); setEditing(true)
       }
       const scrollToPush = () => setTimeout(() => {
         try { document.getElementById('sentinel-push')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch { /* noop */ }
@@ -468,7 +513,7 @@ window.__ModuleLoader__.load({
           })) : null,
         webhookHelp(),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-          host?.configured ? h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => { setEditing(false); setOffConfirm(false); setResult(null) } }, t('push.cancel')) : null,
+          host?.configured ? h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => { setEditing(false); setOffConfirm(false); showResult(null) } }, t('push.cancel')) : null,
           host?.configured ? h('button', {
             type: 'button', disabled: !!busy,
             style: { ...css.btn, color: offConfirm ? T.error : T.sub, borderColor: offConfirm ? T.error : T.border },

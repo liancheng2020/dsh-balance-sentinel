@@ -1,4 +1,4 @@
-# dsh-balance-sentinel ｜ 余额哨兵
+# dsh-balance-sentinel ｜ 余额哨兵 · DeepSeek 余额告警
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,7 +12,7 @@
 **DeepSeek 余额不足，自动提醒到飞书／钉钉等 IM。** 后台监控、主动来找你；带官方账号服务的宿主**免填 API Key**（需已登录）。
 
 > **先看三行**
-> - 本机 DSH Desktop／本机 Web，**DSH 运行期间才监控**；不支持远程 Web 面板
+> - **DSH 运行期间监控**，关闭即停；不支持远程 Web 面板
 > - 余额低于阈值自动推送到飞书／钉钉，充值或调阈值后推一条「恢复/解除」
 > - 面板里粘 webhook → **保存并发送测试**，保存即生效；装完只需重启一次
 
@@ -37,11 +37,9 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 
 桌面端：设置 → 插件 → 添加插件，填 `dsh-balance-sentinel`。装完重启一次 DSH。
 
-## 支持范围
+**适用环境**：仅本机 DSH Desktop／本机 Web，监控跑在 DSH 进程里、**退出即停**（重开从本机状态继续）；**不支持远程 Web 面板**（桥接只绑 `127.0.0.1:17430`，只接受本机页面）。**免 Key** 需宿主内置账号服务且已登录（免 Key ≠ 无需账户），否则用 `DEEPSEEK_API_KEY` 或 `balance.apiKey`，都没有时面板给出明确原因。
 
-- **本机 DSH Desktop／本机 Web**：监控跑在 DSH 进程里，退出即停，重开从本机状态继续。
-- **不支持远程 Web 面板**：面板走 `127.0.0.1:17430` 本地桥接，只接受本机页面。
-- **免 Key 需宿主内置账号服务且已登录** DeepSeek 账户（免 Key ≠ 无需账户）；否则用 `DEEPSEEK_API_KEY` 或 `balance.apiKey`，都没有时面板给出明确原因。
+> 当前版本 `0.1.0`（见 [CHANGELOG](CHANGELOG.md)）。
 
 ## 首次使用（两步接通）
 
@@ -74,7 +72,7 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
       quiet: { start: "", end: "" }  # 免打扰，如 "23:00"–"08:00"
       apiKey: ""                   # 仅老宿主回落用；优先宿主账号/环境变量
     notify:
-      signature: true              # 推送尾部署名「via 余额哨兵 · 安装：github:…」，可关
+      signature: true              # 推送尾部署名「via DeepSeek 余额哨兵 · 安装：github:…」，可关
       signatureText: ""
     localApi:
       enabled: true                # 面板桥接 127.0.0.1:17430，可关

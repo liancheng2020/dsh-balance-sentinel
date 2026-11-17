@@ -1,4 +1,4 @@
-# dsh-balance-sentinel ｜ Balance Sentinel
+# dsh-balance-sentinel ｜ Balance Sentinel · DeepSeek balance alerts
 
 [中文](README.md) | [English](README.en.md)
 
@@ -12,7 +12,7 @@
 **DeepSeek balance running low? Get alerted in Feishu / DingTalk automatically.** Background monitoring that comes to you; **no API key to paste** on hosts with the built-in account service (sign-in required).
 
 > **Three lines first**
-> - Local DSH Desktop / local web host, **monitored only while DSH runs**; no remote web panel
+> - **Monitored while DSH runs**, stops when it exits; no remote web panel
 > - Low balance pushes to Feishu / DingTalk; a top-up or threshold change sends one "recovered"/"resolved"
 > - Paste a webhook in the panel → **Save and send test**; effective on save, one restart after install
 
@@ -37,11 +37,9 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 
 Desktop app: Settings → Plugins → add `dsh-balance-sentinel`. Restart DSH once.
 
-## Support boundary
+**Where it runs**: local DSH desktop or local web host only — monitoring lives in the DSH process and **stops when DSH exits** (reopening resumes from the local state file); **no remote web panel** (the bridge binds `127.0.0.1:17430` and only accepts pages from this machine). **No key** requires the host account service with a signed-in account (no key ≠ no account); otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey` — with neither, the panel states the exact reason.
 
-- **Local DSH Desktop / local web host**: monitoring runs inside the DSH process — quit DSH and it stops; reopening resumes from the local state file.
-- **No remote web panel**: the panel uses the loopback bridge on `127.0.0.1:17430`, which only accepts pages from this machine.
-- **No key needs the host account service and a signed-in DeepSeek account** (no key ≠ no account); otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey` — with neither, the panel states the exact reason.
+> Current version `0.1.0` (see [CHANGELOG](CHANGELOG.md)).
 
 ## First use (two steps)
 
@@ -74,7 +72,7 @@ If the balance is already below a threshold when you connect, one current-state 
       quiet: { start: "", end: "" }  # e.g. "23:00"–"08:00"
       apiKey: ""                   # fallback for older hosts only
     notify:
-      signature: true              # "via 余额哨兵 · install: github:…" line, opt-out
+      signature: true              # "via DeepSeek 余额哨兵 · install: github:…" line, opt-out
       signatureText: ""
     localApi:
       enabled: true                # panel bridge on 127.0.0.1:17430

@@ -393,7 +393,9 @@ await atest('B6 test-push reaches webhook', async () => {
   const j = await (await fetch('http://127.0.0.1:17436/test-push', { method: 'POST' })).json()
   assert.equal(j.ok, true)
   assert.ok(received.length >= 1)
-  stop(); await new Promise((r) => hook.close(r))
+  stop()
+  hook.closeAllConnections?.()
+  await new Promise((r) => hook.close(r))
 })
 
 // ---- W: wecom chunking still within platform cap ----
@@ -409,6 +411,9 @@ await atest('W1 wecom 8000B chunks each <=4096B', async () => {
   const r = await n.send({ channel: 'wecom', url: 'http://127.0.0.1:' + srv.address().port }, '标题', text)
   assert.ok(r.chunks >= 2)
   for (const x of received) assert.ok(Buffer.byteLength(x.markdown.content, 'utf8') <= 4096)
+  // Keep-alive sockets would make close() wait out keepAliveTimeout (5s on node
+  // 18), which tripped the per-test watchdog on CI. Drop them before closing.
+  srv.closeAllConnections?.()
   await new Promise((r) => srv.close(r))
 })
 test('W2 chunkContent UTF-8 safe', () => {

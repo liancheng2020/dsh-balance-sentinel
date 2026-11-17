@@ -22,7 +22,24 @@ function createMiniReact() {
     const set = (v) => { store.hooks[i] = typeof v === 'function' ? v(store.hooks[i]) : v }
     return [store.hooks[i], set]
   }
-  const useEffect = (fn) => { if (ctx.store.ran) return; try { const c = fn(); if (typeof c === 'function') ctx.cleanups.push(c) } catch { /* ignore */ } }
+  // Dependency-aware: a real component re-runs an effect when deps change, and
+  // several behaviors (toast auto-hide, panels reloading on refresh) depend on it.
+  const useEffect = (fn, deps) => {
+    const store = ctx.store, i = ctx.idx++
+    const prev = store.effects[i]
+    const same = prev && deps !== undefined &&
+      prev.deps && prev.deps.length === deps.length && deps.every((d, k) => d === prev.deps[k])
+    if (same) return
+    if (prev && prev.cleanup) { try { prev.cleanup() } catch { /* ignore */ } }
+    let cleanup = null
+    try { const c = fn(); if (typeof c === 'function') cleanup = c } catch { /* ignore */ }
+    store.effects[i] = { deps, cleanup }
+  }
+  const useRef = (init) => {
+    const store = ctx.store, i = ctx.idx++
+    if (!store.refs[i]) store.refs[i] = { current: init }
+    return store.refs[i]
+  }
   const useMemo = (fn) => fn()
   function render(el, path = '0') {
     if (el == null || typeof el === 'boolean') return null
@@ -31,9 +48,9 @@ function createMiniReact() {
     const { type, props, children } = el
     if (typeof type === 'function') {
       const key = path + ':' + (type.name || 'anon')
-      if (!stores.has(key)) stores.set(key, { hooks: [], cleanups: [], ran: false })
+      if (!stores.has(key)) stores.set(key, { hooks: [], effects: [], refs: [], ran: false })
       const store = stores.get(key); const prev = ctx
-      ctx = { hooks: store.hooks, idx: 0, cleanups: store.cleanups, store }
+      ctx = { hooks: store.hooks, idx: 0, store }
       const out = type({ ...props, children })
       store.ran = true; ctx = prev
       return render(out, path + '>' + (type.name || 'anon'))
@@ -41,8 +58,10 @@ function createMiniReact() {
     const kids = (children || []).map((c, i) => render(c, path + '/' + i)).filter(Boolean)
     return { type, props, children: kids }
   }
-  const dispose = () => { for (const s of stores.values()) for (const c of s.cleanups) { try { c() } catch { /* ignore */ } } }
-  return { createElement, useState, useEffect, useMemo, render, dispose }
+  const dispose = () => {
+    for (const s of stores.values()) for (const e of s.effects) if (e && e.cleanup) { try { e.cleanup() } catch { /* ignore */ } }
+  }
+  return { createElement, useState, useEffect, useRef, useMemo, render, dispose }
 }
 
 function* walk(node) {
@@ -56,10 +75,15 @@ const findButton = (node, label) => [...walk(node)].find((n) => n.type === 'butt
 const findById = (node, id) => [...walk(node)].find((n) => n.props && n.props.id === id) || null
 
 const els = {}
+const docListeners = {}
 global.document = {
+  visibilityState: 'visible',
   getElementById: (id) => els[id] || null,
   createElement: (tag) => ({ tag, id: '', textContent: '', style: {} }),
   head: { appendChild: (el) => { if (el.id) els[el.id] = el } },
+  addEventListener: (t, fn) => { (docListeners[t] || (docListeners[t] = [])).push(fn) },
+  removeEventListener: (t, fn) => { docListeners[t] = (docListeners[t] || []).filter((f) => f !== fn) },
+  dispatch: (t) => { for (const fn of (docListeners[t] || []).slice()) fn() },
 }
 
 // ---- mock bridge ----
@@ -73,10 +97,13 @@ const HOST = {
   enabled: true, signature: true,
 }
 let statusFails = 0
+let statusCalls = 0
+let webhookFails = 0
 const posts = []
 const fetchMock = async (url, init) => {
   const u = String(url)
   if (u.startsWith('http://127.0.0.1:17430/status')) {
+    statusCalls++
     if (statusFails > 0) { statusFails--; throw new Error('ECONNREFUSED') }
     return { ok: true, status: 200, json: async () => HOST }
   }
@@ -84,6 +111,10 @@ const fetchMock = async (url, init) => {
     const body = JSON.parse(init?.body || '{}')
     posts.push(['webhook', body])
     const off = body.channel === 'none'
+    if (webhookFails > 0) {
+      webhookFails--
+      return { ok: true, status: 200, json: async () => ({ ok: false, code: 'bad-url', message: 'URL 格式不对' }) }
+    }
     return { ok: true, status: 200, json: async () => ({ ok: true, channel: body.channel, configured: !off, urlHost: off ? '' : 'qyapi.weixin.qq.com', secretSet: false }) }
   }
   if (u.startsWith('http://127.0.0.1:17430/test-push')) { posts.push(['test-push']); return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom' }) } }
@@ -99,8 +130,13 @@ const fetchMock = async (url, init) => {
 function boot(lang = 'zh') {
   const react = createMiniReact()
   let mod = null
+  // Intervals are captured instead of scheduled so a poll can be fired on demand
+  // (deterministic, and no stray timers between tests).
+  const intervals = []
   const sandbox = {
-    console, setTimeout, clearTimeout, setInterval, clearInterval,
+    console, setTimeout, clearTimeout,
+    setInterval: (fn, ms) => { const t = { fn, ms, cleared: false }; intervals.push(t); return t },
+    clearInterval: (t) => { if (t) t.cleared = true },
     fetch: fetchMock, document: global.document, navigator: {},
     Intl, Date, URL, JSON, Math, Number, String, Object, Array, Promise, Error, Boolean, RegExp,
   }
@@ -121,7 +157,8 @@ function boot(lang = 'zh') {
     },
   })
   const render = () => react.render(react.createElement(Panel))
-  return { react, render, dispose: react.dispose }
+  const tick = () => { for (const t of intervals.slice()) if (!t.cleared) t.fn() }
+  return { react, render, dispose: react.dispose, tick, intervals }
 }
 
 let passed = 0, failed = 0
@@ -200,12 +237,11 @@ await atest('P5 thresholds: invalid blocked, valid dirty saves', async () => {
   await sleep(30)
   if (!posts.some(([p, b]) => p === 'prefs' && b.warn === 30 && b.critical === 8)) throw new Error('prefs not posted')
   node = render()
-  const flat = [...walk(node)]
-  const iTh = flat.findIndex((n) => n.text === '告警阈值')
-  const iSaved = flat.findIndex((n) => n.text && n.text.includes('阈值已保存'))
-  const iPush = flat.findIndex((n) => n.text === '推送配置')
-  if (!(iTh > -1 && iSaved > iTh && iPush > iSaved)) throw new Error('saved message must sit below threshold card, above push section')
-  if (!flat[iSaved].text.includes('立即生效')) throw new Error('saved message must say immediate, not next cycle')
+  const toast = [...walk(node)].find((n) => n.props && String(n.props.className || '').includes('sentinel-toast'))
+  if (!toast) throw new Error('confirmation must be the floating toast, not an inline block')
+  if (!textOf(toast).includes('阈值已保存') || !textOf(toast).includes('立即生效')) {
+    throw new Error('saved toast must say immediate, not next cycle')
+  }
   dispose()
 })
 await atest('P6 shortest path: paste url -> save&test -> success', async () => {
@@ -325,6 +361,87 @@ await atest('P13 zh/en catalogs have identical keys', async () => {
   const missEn = [...zh].filter((k) => !en.has(k))
   const missZh = [...en].filter((k) => !zh.has(k))
   if (missEn.length || missZh.length) throw new Error(`missing en: ${missEn.join(',') || '-'} | missing zh: ${missZh.join(',') || '-'}`)
+})
+
+await atest('P14 threshold save confirms via top toast, gone in 2s', async () => {
+  resetHost()
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  let node = render()
+  findById(node, 'sentinel-warn').props.onChange({ target: { value: '30' } })
+  node = render()
+  const save = findButton(node, '保存阈值')
+  if (save.props.disabled) throw new Error('save should be enabled')
+  await save.props.onClick()
+  await sleep(80)
+  node = render()
+  const toast = [...walk(node)].find((n) => n.props && String(n.props.className || '').includes('sentinel-toast'))
+  if (!toast) throw new Error('no toast after saving thresholds')
+  if (!textOf(toast).includes('阈值已保存')) throw new Error('toast text: ' + textOf(toast))
+  await sleep(2100)
+  if (textOf(render()).includes('阈值已保存')) throw new Error('toast should fade after 2s and leave no inline copy')
+  dispose()
+})
+await atest('P15 error notice is not auto-dismissed', async () => {
+  resetHost(); HOST.configured = false; HOST.channel = 'none'
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  let node = render()
+  findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
+  node = render()
+  webhookFails = 1
+  await findButton(node, '保存并发送测试').props.onClick()
+  await sleep(80)
+  if (!textOf(render()).includes('URL 格式不对')) throw new Error('error not shown')
+  await sleep(3200)
+  if (!textOf(render()).includes('URL 格式不对')) throw new Error('error must stay until the next action')
+  webhookFails = 0
+  dispose()
+})
+
+await atest('P16 poll clears a stale pending banner without any click', async () => {
+  resetHost(); HOST.pending = { kind: 'warn', cause: null, hold: false, ambiguous: false, attempts: 0, lastError: null }
+  const b = boot()
+  b.render()
+  await sleep(30)
+  if (!textOf(b.render()).includes('有一条「预警」通知待发送')) throw new Error('pending banner missing')
+  if (!b.intervals.length || b.intervals[0].ms !== 15000) throw new Error('expected a 15s poll')
+  HOST.pending = null // the monitor delivered the alert
+  b.tick()
+  await sleep(40)
+  if (textOf(b.render()).includes('待发送')) throw new Error('poll did not clear the banner')
+  b.dispose()
+})
+await atest('P17 polls pause while hidden and refresh on return', async () => {
+  resetHost()
+  const b = boot()
+  b.render()
+  await sleep(30)
+  const base = statusCalls
+  global.document.visibilityState = 'hidden'
+  b.tick(); await sleep(30)
+  if (statusCalls !== base) throw new Error('must not poll while hidden')
+  global.document.visibilityState = 'visible'
+  global.document.dispatch('visibilitychange'); await sleep(30)
+  if (statusCalls !== base + 1) throw new Error('returning to the panel must refresh once')
+  b.dispose()
+  global.document.visibilityState = 'visible'
+})
+await atest('P18 background poll keeps in-progress threshold edits', async () => {
+  resetHost()
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let node = b.render()
+  findById(node, 'sentinel-warn').props.onChange({ target: { value: '30' } })
+  node = b.render()
+  if (findById(node, 'sentinel-warn').props.value !== '30') throw new Error('draft not applied')
+  b.tick(); await sleep(40)
+  node = b.render()
+  if (findById(node, 'sentinel-warn').props.value !== '30') throw new Error('poll overwrote an unsaved edit')
+  b.dispose()
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)
