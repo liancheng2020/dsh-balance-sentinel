@@ -27,15 +27,15 @@
 Requires DSH ≥ `0.2.1-rc.2`, Node ≥ 18.
 
 ```sh
-# npm (recommended)
-dsh plugin --profile web add dsh-balance-sentinel
-# or straight from GitHub
+# straight from GitHub (works any time — start here)
 dsh plugin --profile web add github:liancheng2020/dsh-balance-sentinel
-# or the Release tarball
+# or npm (published to npm alongside each Release)
+dsh plugin --profile web add dsh-balance-sentinel
+# or the pinned Release tarball
 dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentinel/releases/download/v0.1.0/dsh-balance-sentinel-0.1.0.tgz
 ```
 
-Desktop app: Settings → Plugins → add `dsh-balance-sentinel`. Restart DSH once.
+Any one of the three is enough; if the npm/Release line is not live yet, use the first. Desktop app: Settings → Plugins → add `dsh-balance-sentinel` or `github:liancheng2020/dsh-balance-sentinel`. Restart DSH once.
 
 **Where it runs**: local DSH desktop or local web host only — monitoring lives in the DSH process and **stops when DSH exits** (reopening resumes from the local state file); **no remote web panel** (the bridge binds `127.0.0.1:17430` and only accepts pages from this machine). **No key** requires the host account service with a signed-in account (no key ≠ no account); otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey` — with neither, the panel states the exact reason.
 

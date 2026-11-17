@@ -27,15 +27,15 @@
 要求：DSH ≥ `0.2.1-rc.2`、Node ≥ 18。
 
 ```sh
-# npm（推荐）
-dsh plugin --profile web add dsh-balance-sentinel
-# 或 GitHub 仓库直装
+# GitHub 仓库直装（任何时候都可用，推荐先用这条）
 dsh plugin --profile web add github:liancheng2020/dsh-balance-sentinel
-# 或 Release 直链
+# 或 npm（随 Release 一同发布到 npm）
+dsh plugin --profile web add dsh-balance-sentinel
+# 或 Release 固定版本 tarball
 dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentinel/releases/download/v0.1.0/dsh-balance-sentinel-0.1.0.tgz
 ```
 
-桌面端：设置 → 插件 → 添加插件，填 `dsh-balance-sentinel`。装完重启一次 DSH。
+三条任选一条即可；若 npm／Release 那条还没上线，用第一条。桌面端：设置 → 插件 → 添加插件，填 `dsh-balance-sentinel` 或 `github:liancheng2020/dsh-balance-sentinel`。装完重启一次 DSH。
 
 **适用环境**：仅本机 DSH Desktop／本机 Web，监控跑在 DSH 进程里、**退出即停**（重开从本机状态继续）；**不支持远程 Web 面板**（桥接只绑 `127.0.0.1:17430`，只接受本机页面）。**免 Key** 需宿主内置账号服务且已登录（免 Key ≠ 无需账户），否则用 `DEEPSEEK_API_KEY` 或 `balance.apiKey`，都没有时面板给出明确原因。
 

@@ -5,7 +5,7 @@ All notable changes to this project are documented here. Format follows
 
 ## [0.1.0] - 2026-11-17
 
-首个发布版。仓库历史 `22bb4d1` → `df8396c` 对应本版本的全部内容；后续改动在下一版
+首个发布版。仓库历史自 `22bb4d1` 起至本版发布提交，对应本版本的全部内容；后续改动在下一版
 （`v0.2.0`）的标题下另起一节。
 
 ### Added
