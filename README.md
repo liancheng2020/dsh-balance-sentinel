@@ -34,10 +34,17 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 
 **兼容条件（免 Key 的边界）**：免 Key 依赖宿主内置账号服务（官方「设置 → 账号与余额」同源，**需已登录 DeepSeek 账户**——免 Key ≠ 无需账户）。本机桌面端实测可用；老宿主无该服务时自动回落 `DEEPSEEK_API_KEY` 环境变量或配置 `balance.apiKey`，仍无则面板给出明确原因，不静默失败。
 
+## 支持范围（装前先看）
+
+- **宿主**：本机 **DSH Desktop** 与本机 **Web**（`dsh plugin --profile web add …` 后在本机浏览器打开同一宿主的 Web 面板）。要求 DSH ≥ `0.2.1-rc.2`、Node ≥ 18。
+- **只在 DSH 运行期间监控**：轮询、判定、推送都跑在 DSH 进程里；退出或关闭 DSH 即停止，不会再查余额、也不会再推送。重新打开后从本机状态文件继续，无需重新配置。
+- **不支持远程 Web 面板**：面板通过 `127.0.0.1:17430` 的本地桥接读写状态，只接受本机页面来源；把桥接/面板暴露给其他机器、或在另一台机器上用浏览器打开 Web 面板，都不在支持范围内（面板会提示拿不到宿主状态）。
+- **免 Key 的边界**：需要宿主内置账号服务且**已登录 DeepSeek 账户**；没有该服务时用 `DEEPSEEK_API_KEY` 或 `balance.apiKey`。免 Key ≠ 无需账户。
+
 ## 首次使用（两步接通）
 
 1. 打开 **余额哨兵** 面板：立即看到真实余额，或明确的不可用原因（未登录 / 无账号服务 / 网络…）。
-2. 「推送配置」粘 webhook 地址（自动识别通道）→ **保存并发送测试** → 成功即接通。监控默认开着；**没配通道前只监控不推送**，横幅会清楚提示"通知未接通"。
+2. 「推送配置」选通道 → 粘 webhook 地址（自动识别通道）→ **保存并发送测试** → 成功即接通。飞书／钉钉配置框内有「如何获取机器人 Webhook」：官方文档链接 + 三步取值路径 + 该通道适用的安全设置（钉钉加签密钥可直接填；飞书发的是消息卡片、未实现签名校验，请勿开启签名校验）。监控默认开着；**没配通道前只监控不推送**，横幅会清楚提示"通知未接通"。
 
 接通时若余额已低于阈值，会补发一条当前状态通知（仅一次）。
 
@@ -85,6 +92,6 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 
 装不上或推送不通，请带 DSH 版本 / 插件版本 / 系统 / 报错原文到 [Issues](https://github.com/liancheng2020/dsh-balance-sentinel/issues)。
 
-本地验证：`node scripts/selftest.mjs`、`node scripts/selftest-client.mjs`、`node scripts/verify-dedup.mjs`（纯 node、零依赖）。
+本地验证：`node scripts/selftest.mjs`、`node scripts/selftest-client.mjs`、`node scripts/verify-dedup.mjs`、`node scripts/verify-market.mjs`（纯 node、零依赖）。
 
 同作者另一插件：[AIHOT 雷达](https://github.com/liancheng2020/dsh-aihot-radar)（额度重置监控 + AI 资讯日报）。

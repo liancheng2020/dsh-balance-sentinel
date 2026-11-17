@@ -1,6 +1,4 @@
-{
-  "screenshots": [
-    "assets/alert-feishu.png",
-    "assets/panel-balance.png"
-  ]
-}
+[
+  "https://raw.githubusercontent.com/liancheng2020/dsh-balance-sentinel/main/assets/alert-feishu.png",
+  "https://raw.githubusercontent.com/liancheng2020/dsh-balance-sentinel/main/assets/panel-balance.png"
+]

@@ -1,7 +1,7 @@
 {
   "name": "dsh-balance-sentinel",
   "version": "0.1.0",
-  "description": "DeepSeek 余额低余额提醒：后台监控、主动推送到飞书/钉钉等 IM；带官方账号服务的 DSH 宿主免填 API Key。",
+  "description": "DeepSeek 低余额主动推送到飞书/钉钉等 IM；仅限本机 DSH Desktop／本机 Web，DSH 运行期间监控；带官方账号服务的宿主免填 API Key。",
   "author": "liancheng2020",
   "type": "module",
   "engines": {
@@ -12,7 +12,9 @@
   "scripts": {
     "selftest": "node scripts/selftest.mjs",
     "selftest:client": "node scripts/selftest-client.mjs",
-    "verify:dedup": "node scripts/verify-dedup.mjs"
+    "verify:dedup": "node scripts/verify-dedup.mjs",
+    "verify:market": "node scripts/verify-market.mjs",
+    "icon": "node scripts/make-icon.mjs"
   },
   "icon": "icon.svg",
   "exports": {

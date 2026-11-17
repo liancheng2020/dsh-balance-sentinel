@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "余额哨兵",
-    "description": "DeepSeek 余额低余额提醒：后台监控、主动推送到飞书/钉钉等 IM；带官方账号服务的 DSH 宿主免填 API Key。"
+    "description": "DeepSeek 低余额主动推送到飞书/钉钉等 IM；仅支持本机 DSH Desktop／本机 Web，DSH 运行期间监控；带官方账号服务的宿主免填 API Key。"
   },
   "sub": "DeepSeek 余额监控 · 低余额主动提醒",
   "refresh": "刷新",
@@ -28,6 +28,7 @@
   "alert.retry": "重试发送",
   "alert.retried": "已触发重试，立即补发。",
   "monitor.off": "后台监控已关闭（balance.enabled=false），面板仅展示。",
+  "support.scope": "仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。免 Key 需宿主提供账号服务且已登录。",
   "quiet.on": "免打扰 {s}–{e}，期间告警顺延、出窗合并推送。",
   "th.title": "告警阈值",
   "th.warn": "预警阈值",
@@ -68,7 +69,10 @@
   "push.test": "发送测试推送",
   "push.testing": "发送中…",
   "push.testOk": "测试推送成功：{c} 通道正常，发出 {n} 条。",
-  "bridge.title": "面板拿不到宿主状态：本地桥接未启动、端口被占用，或页面环境拦截。可复制配置手填到 state.json 的 webhook 字段，保存后重启 DSH。",
+  "push.help": "如何获取机器人 Webhook",
+  "help.feishu.steps": "1. 群聊右上角「…」→ 设置 → 群机器人 → 添加机器人 → 自定义机器人。\n2. 复制 Webhook 地址（open.feishu.cn/open-apis/bot/v2/hook/…）。\n3. 安全设置：本插件发送消息卡片，未实现签名校验，请勿勾选「签名校验」；需要限制来源时用「IP 白名单」（要求固定出口 IP），关键词校验对卡片消息不保证生效。",
+  "help.dingtalk.steps": "1. 群设置 → 机器人 → 添加机器人 → 自定义（通过 Webhook 接入）。\n2. 安全设置选「加签」时，把密钥填到上面的「加签密钥」；选「自定义关键词」时填 余额。\n3. 复制 Webhook 地址（oapi.dingtalk.com/robot/send?access_token=…）。",
+  "bridge.title": "面板拿不到宿主状态：本地桥接未启动、端口被占用、页面环境拦截，或你在其他机器打开了远程 Web 面板（不支持）。可复制配置手填到 state.json 的 webhook 字段，保存后重启 DSH。",
   "bridge.path": "或手动编辑：",
   "bridge.retry": "重试",
   "bridge.snippet": "复制配置片段",

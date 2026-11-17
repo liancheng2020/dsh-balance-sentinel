@@ -34,10 +34,17 @@ Desktop app: Settings → Plugins → add `dsh-balance-sentinel`. Restart DSH on
 
 **Compatibility (the no-key boundary)**: no-key relies on the host's built-in account service (same source as the official "Account & Balance" page; **a signed-in DeepSeek account is required** — no key ≠ no account). Verified on the current desktop host; older hosts fall back to the `DEEPSEEK_API_KEY` env var or `balance.apiKey` config, and if neither exists the panel states the exact reason instead of failing silently.
 
+## Support boundary (read before installing)
+
+- **Hosts**: the local **DSH Desktop** and the local **Web** host (`dsh plugin --profile web add …`, then open the web panel on the same machine). Requires DSH ≥ `0.2.1-rc.2`, Node ≥ 18.
+- **Monitored only while DSH runs**: polling, decisions and pushes all live inside the DSH process. Quit or close DSH and monitoring stops — no more balance queries, no more pushes. Reopening DSH resumes from the local state file; nothing needs reconfiguring.
+- **No remote web panel**: the panel reads and writes state through the loopback bridge on `127.0.0.1:17430`, which only accepts pages from this machine. Exposing the bridge/panel to other machines, or opening the web panel from another machine, is out of scope (the panel reports that it cannot reach the host).
+- **No-key boundary**: needs the host's built-in account service **with a signed-in DeepSeek account**; otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey`. No key ≠ no account.
+
 ## First use (two steps to connected)
 
 1. Open the **Balance Sentinel** panel: your real balance immediately, or a clear unavailable reason (signed out / no account service / network…).
-2. In "Push settings", paste a webhook URL (channel auto-detected) → **Save and send test** → success means connected. Monitoring is on by default; **until a channel is saved it watches without pushing**, and a banner says so.
+2. In "Push settings", pick a channel and paste a webhook URL (channel auto-detected) → **Save and send test** → success means connected. The Feishu/DingTalk form includes "How to get a bot webhook": the official doc, the three-click path, and the security settings that channel actually supports (DingTalk sign secret can be pasted; Feishu receives message cards and signature verification is not implemented, so leave it off). Monitoring is on by default; **until a channel is saved it watches without pushing**, and a banner says so.
 
 If the balance is already below a threshold when you connect, one current-state notice is sent (once).
 
@@ -85,6 +92,6 @@ Thresholds and channel are also editable in the panel; saving applies without a 
 
 Install or push problems? Open an [Issue](https://github.com/liancheng2020/dsh-balance-sentinel/issues) with DSH version / plugin version / OS / raw error.
 
-Local verification: `node scripts/selftest.mjs`, `node scripts/selftest-client.mjs`, `node scripts/verify-dedup.mjs` (plain node, zero deps).
+Local verification: `node scripts/selftest.mjs`, `node scripts/selftest-client.mjs`, `node scripts/verify-dedup.mjs`, `node scripts/verify-market.mjs` (plain node, zero deps).
 
 Same author: [AIHOT Radar](https://github.com/liancheng2020/dsh-aihot-radar) (quota-reset monitoring + AI news digest).

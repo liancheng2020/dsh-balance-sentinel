@@ -266,6 +266,67 @@ await atest('P10 threshold-resolved pending shows 解除 label', async () => {
   dispose()
 })
 
+await atest('P11 feishu/dingtalk form: official webhook help, save&test kept', async () => {
+  resetHost(); HOST.configured = false; HOST.channel = 'none'
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  let node = render()
+  findById(node, 'sentinel-chan').props.onChange({ target: { value: 'feishu' } })
+  node = render()
+  const hrefs = () => [...walk(node)].filter((n) => n.type === 'a').map((n) => String(n.props.href || ''))
+  if (!hrefs().some((u) => u.includes('open.feishu.cn/document/client-docs/bot-v3/add-custom-bot'))) throw new Error('feishu doc link missing')
+  const txt = textOf(node)
+  if (!txt.includes('如何获取机器人 Webhook')) throw new Error('help entry title missing')
+  if (!txt.includes('签名校验')) throw new Error('feishu security hint missing')
+  if (!findButton(node, '保存并发送测试')) throw new Error('save&test must stay')
+  findById(node, 'sentinel-chan').props.onChange({ target: { value: 'dingtalk' } })
+  node = render()
+  if (![...walk(node)].some((n) => n.type === 'a' && String(n.props.href).includes('open.dingtalk.com/document/orgapp/custom-robot-access'))) throw new Error('dingtalk doc link missing')
+  const dt = textOf(node)
+  if (!dt.includes('加签密钥') || !dt.includes('自定义关键词')) throw new Error('dingtalk security hint missing')
+  dispose()
+})
+await atest('P12 support boundary shown in zh/en; bridge-down names remote panel', async () => {
+  resetHost()
+  let b = boot()
+  b.render()
+  await sleep(30)
+  let txt = textOf(b.render())
+  if (!txt.includes('仅支持本机 DSH Desktop') || !txt.includes('不支持远程 Web 面板')) throw new Error(txt.slice(0, 300))
+  if (!txt.includes('免 Key 需宿主提供账号服务且已登录')) throw new Error('no-key boundary missing')
+  b.dispose()
+
+  resetHost()
+  b = boot('en')
+  b.render()
+  await sleep(30)
+  txt = textOf(b.render())
+  if (!txt.includes('Local DSH Desktop or local web host only')) throw new Error(txt.slice(0, 300))
+  if (!txt.includes('remote web panels are not supported')) throw new Error('en support boundary incomplete')
+  b.dispose()
+
+  resetHost(); statusFails = 99
+  b = boot()
+  await sleep(1800)
+  txt = textOf(b.render())
+  if (!txt.includes('远程 Web 面板')) throw new Error('bridge-down must name the remote-panel case')
+  statusFails = 0
+  b.dispose()
+})
+
+await atest('P13 zh/en catalogs have identical keys', async () => {
+  const iZh = clientCode.indexOf('      zh: {')
+  const iEn = clientCode.indexOf('      en: {')
+  if (iZh < 0 || iEn < 0 || iEn < iZh) throw new Error('catalogs not found')
+  const keysOf = (s) => [...s.matchAll(/'([a-zA-Z][\w.]*)':/g)].map((m) => m[1])
+  const zh = new Set(keysOf(clientCode.slice(iZh, iEn)))
+  const en = new Set(keysOf(clientCode.slice(iEn, clientCode.indexOf('\n    }', iEn))))
+  const missEn = [...zh].filter((k) => !en.has(k))
+  const missZh = [...en].filter((k) => !zh.has(k))
+  if (missEn.length || missZh.length) throw new Error(`missing en: ${missEn.join(',') || '-'} | missing zh: ${missZh.join(',') || '-'}`)
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exitCode = failed ? 1 : 0
 setTimeout(() => process.exit(process.exitCode), 100).unref()

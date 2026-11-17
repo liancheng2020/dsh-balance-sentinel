@@ -12,6 +12,11 @@ window.__ModuleLoader__.load({
     const LOCAL_API = 'http://127.0.0.1:17430'
     const REPO = 'https://github.com/liancheng2020/dsh-balance-sentinel'
     const TOP_UP = 'https://platform.deepseek.com/'
+    // Official "how to get a custom bot webhook" pages, shown next to the form.
+    const BOT_DOC = {
+      feishu: 'https://open.feishu.cn/document/client-docs/bot-v3/add-custom-bot',
+      dingtalk: 'https://open.dingtalk.com/document/orgapp/custom-robot-access',
+    }
     const CHANNELS = ['wecom', 'dingtalk', 'feishu', 'bark', 'serverchan', 'telegram', 'generic']
     const URL_HINT = {
       wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…',
@@ -59,6 +64,7 @@ window.__ModuleLoader__.load({
         'alert.pending': '有一条「{k}」通知待发送。', 'alert.hold': '告警发送受阻：{e}', 'alert.retry': '重试发送',
         'alert.retried': '已触发重试，立即补发。',
         'monitor.off': '后台监控已关闭（balance.enabled=false），面板仅展示。',
+        'support.scope': '仅支持本机 DSH Desktop／本机 Web：DSH 运行时监控，退出后停止；不支持远程 Web 面板连接。免 Key 需宿主提供账号服务且已登录。',
         'quiet.on': '免打扰 {s}–{e}，期间告警顺延、出窗合并推送。',
         'th.title': '告警阈值', 'th.warn': '预警阈值', 'th.critical': '告急阈值', 'th.save': '保存阈值',
         'th.saved': '阈值已保存，立即生效。', 'th.bad': '需为正数，且预警阈值大于告急阈值。',
@@ -76,7 +82,10 @@ window.__ModuleLoader__.load({
         'push.disable': '关闭推送', 'push.disableConfirm': '确认关闭？', 'push.disabled': '已关闭推送，可随时重新配置。',
         'push.test': '发送测试推送', 'push.testing': '发送中…',
         'push.testOk': '测试推送成功：{c} 通道正常，发出 {n} 条。',
-        'bridge.title': '面板拿不到宿主状态：本地桥接未启动、端口被占用，或页面环境拦截。可复制配置手填到 state.json 的 webhook 字段，保存后重启 DSH。',
+        'push.help': '如何获取机器人 Webhook',
+        'help.feishu.steps': '1. 群聊右上角「…」→ 设置 → 群机器人 → 添加机器人 → 自定义机器人。\n2. 复制 Webhook 地址（open.feishu.cn/open-apis/bot/v2/hook/…）。\n3. 安全设置：本插件发送消息卡片，未实现签名校验，请勿勾选「签名校验」；需要限制来源时用「IP 白名单」（要求固定出口 IP），关键词校验对卡片消息不保证生效。',
+        'help.dingtalk.steps': '1. 群设置 → 机器人 → 添加机器人 → 自定义（通过 Webhook 接入）。\n2. 安全设置选「加签」时，把密钥填到上面的「加签密钥」；选「自定义关键词」时填 余额。\n3. 复制 Webhook 地址（oapi.dingtalk.com/robot/send?access_token=…）。',
+        'bridge.title': '面板拿不到宿主状态：本地桥接未启动、端口被占用、页面环境拦截，或你在其他机器打开了远程 Web 面板（不支持）。可复制配置手填到 state.json 的 webhook 字段，保存后重启 DSH。',
         'bridge.path': '或手动编辑：', 'bridge.retry': '重试', 'bridge.snippet': '复制配置片段',
         'bridge.snippetCopied': '配置片段已复制，粘到 state.json 的 webhook 字段后重启 DSH。',
         'copyFail': '复制失败，请手动复制：',
@@ -100,6 +109,7 @@ window.__ModuleLoader__.load({
         'alert.pending': 'A "{k}" notice is waiting to be sent.', 'alert.hold': 'Alert delivery blocked: {e}', 'alert.retry': 'Retry send',
         'alert.retried': 'Retry triggered; sending immediately.',
         'monitor.off': 'Background monitoring is off (balance.enabled=false); the panel is display-only.',
+        'support.scope': 'Local DSH Desktop or local web host only: monitoring runs while DSH is running and stops when it exits; remote web panels are not supported. No-key mode needs the host account service and a signed-in account.',
         'quiet.on': 'Quiet hours {s}–{e}: alerts defer and merge into one push afterwards.',
         'th.title': 'Alert thresholds', 'th.warn': 'Warn below', 'th.critical': 'Critical below', 'th.save': 'Save thresholds',
         'th.saved': 'Thresholds saved; effective immediately.', 'th.bad': 'Positive numbers required, warn above critical.',
@@ -117,7 +127,10 @@ window.__ModuleLoader__.load({
         'push.disable': 'Turn off', 'push.disableConfirm': 'Confirm?', 'push.disabled': 'Push turned off; configure it again anytime.',
         'push.test': 'Send test push', 'push.testing': 'Sending…',
         'push.testOk': 'Test push via {c} succeeded, {n} message(s) sent.',
-        'bridge.title': 'The panel cannot reach the host: bridge not running, port taken, or the page environment blocks it. Copy the config into the webhook field of state.json and restart DSH.',
+        'push.help': 'How to get a bot webhook',
+        'help.feishu.steps': '1. Group "…" menu → Settings → Group bots → Add bot → Custom bot.\n2. Copy the webhook URL (open.feishu.cn/open-apis/bot/v2/hook/…).\n3. Security: this plugin posts message cards and does not implement signature verification, so do not enable "Signature verification"; to restrict callers use an IP allowlist (fixed egress IP). Keyword checks do not reliably apply to card messages.',
+        'help.dingtalk.steps': '1. Group settings → Bots → Add bot → Custom (via webhook).\n2. With "Sign" enabled, paste the secret into "Sign secret" above; with "Keyword" enabled, use 余额 (it appears in every alert title).\n3. Copy the webhook URL (oapi.dingtalk.com/robot/send?access_token=…).',
+        'bridge.title': 'The panel cannot reach the host: bridge not running, port taken, the page environment blocks it, or this is a remote web panel opened from another machine (not supported). Copy the config into the webhook field of state.json and restart DSH.',
         'bridge.path': 'Or edit it yourself:', 'bridge.retry': 'Retry', 'bridge.snippet': 'Copy config snippet',
         'bridge.snippetCopied': 'Snippet copied; paste into the webhook field of state.json, then restart DSH.',
         'copyFail': 'Copy failed, copy manually: ',
@@ -184,6 +197,7 @@ window.__ModuleLoader__.load({
       badgeSoft: (c) => ({ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, color: c, border: `1px solid ${c}`, background: 'transparent', whiteSpace: 'nowrap', flex: 'none' }),
       field: { marginBottom: 9 },
       fieldLabel: { display: 'block', fontSize: 11.5, color: T.tertiary, marginBottom: 4 },
+      helpBox: { padding: '9px 11px', marginBottom: 9, borderRadius: 8, border: `1px dashed ${T.border}`, background: T.base },
       input: { boxSizing: 'border-box', width: '100%', font: 'inherit', fontSize: 12, padding: '7px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.base, color: T.text, outline: 'none' },
       select: { boxSizing: 'border-box', width: '100%', font: 'inherit', fontSize: 12, padding: '7px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.base, color: T.text, outline: 'none', colorScheme: 'dark', cursor: 'pointer' },
       option: { background: T.layer1, color: T.text },
@@ -417,6 +431,17 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', style: { ...css.btn, marginTop: 8 }, className: 'sentinel-btn', onClick: () => setNonce((n) => n + 1) }, t('reason.retry')))
       }
 
+      // Feishu/DingTalk: the webhook lives behind a few group-settings clicks, and
+      // the security choice decides whether pushes land. Link the official page and
+      // list only the settings this notifier actually satisfies.
+      const webhookHelp = () => {
+        const ch = form.channel
+        if (!BOT_DOC[ch]) return null
+        return h('div', { style: css.helpBox },
+          h('a', { style: css.link, className: 'sentinel-link', href: BOT_DOC[ch], target: '_blank', rel: 'noreferrer' }, t('push.help'), h('span', null, '↗')),
+          h('div', { style: { ...css.metaDim, marginTop: 6, whiteSpace: 'pre-line' } }, t('help.' + ch + '.steps')))
+      }
+
       const pushForm = () => h('div', { style: css.card },
         host?.configured ? null : h('div', { style: { ...css.metaDim, marginBottom: 10 } }, t('push.empty')),
         h('div', { style: css.field },
@@ -441,6 +466,7 @@ window.__ModuleLoader__.load({
             id: 'sentinel-secret', style: css.input, value: form.secret, spellCheck: false, autoComplete: 'off',
             onChange: (e) => setForm({ ...form, secret: e.target.value }),
           })) : null,
+        webhookHelp(),
         h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
           host?.configured ? h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => { setEditing(false); setOffConfirm(false); setResult(null) } }, t('push.cancel')) : null,
           host?.configured ? h('button', {
@@ -483,6 +509,8 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', style: css.btn, className: 'sentinel-btn', onClick: () => setNonce((n) => n + 1) }, t('refresh'))),
 
         hero(),
+
+        h('div', { style: { ...css.metaDim, marginBottom: 12 } }, t('support.scope')),
 
         host && host.enabled && !host.configured ? h('div', { style: css.banner },
           h('span', { style: css.bannerText }, t('banner')),

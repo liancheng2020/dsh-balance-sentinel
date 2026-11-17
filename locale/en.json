@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Balance Sentinel",
-    "description": "DeepSeek low-balance alerts pushed to Feishu/DingTalk IM; no API key on hosts with the official account service."
+    "description": "DeepSeek low-balance alerts pushed to Feishu/DingTalk IM. Local DSH Desktop or local web host only, monitored while DSH runs; no API key on hosts with the official account service."
   },
   "sub": "DeepSeek balance watch · proactive low-balance alerts",
   "refresh": "Refresh",
@@ -28,6 +28,7 @@
   "alert.retry": "Retry send",
   "alert.retried": "Retry triggered; sending immediately.",
   "monitor.off": "Background monitoring is off (balance.enabled=false); the panel is display-only.",
+  "support.scope": "Local DSH Desktop or local web host only: monitoring runs while DSH is running and stops when it exits; remote web panels are not supported. No-key mode needs the host account service and a signed-in account.",
   "quiet.on": "Quiet hours {s}–{e}: alerts defer and merge into one push afterwards.",
   "th.title": "Alert thresholds",
   "th.warn": "Warn below",
@@ -68,7 +69,10 @@
   "push.test": "Send test push",
   "push.testing": "Sending…",
   "push.testOk": "Test push via {c} succeeded, {n} message(s) sent.",
-  "bridge.title": "The panel cannot reach the host: bridge not running, port taken, or the page environment blocks it. Copy the config into the webhook field of state.json and restart DSH.",
+  "push.help": "How to get a bot webhook",
+  "help.feishu.steps": "1. Group \"…\" menu → Settings → Group bots → Add bot → Custom bot.\n2. Copy the webhook URL (open.feishu.cn/open-apis/bot/v2/hook/…).\n3. Security: this plugin posts message cards and does not implement signature verification, so do not enable \"Signature verification\"; to restrict callers use an IP allowlist (fixed egress IP). Keyword checks do not reliably apply to card messages.",
+  "help.dingtalk.steps": "1. Group settings → Bots → Add bot → Custom (via webhook).\n2. With \"Sign\" enabled, paste the secret into \"Sign secret\" above; with \"Keyword\" enabled, use 余额 (it appears in every alert title).\n3. Copy the webhook URL (oapi.dingtalk.com/robot/send?access_token=…).",
+  "bridge.title": "The panel cannot reach the host: bridge not running, port taken, the page environment blocks it, or this is a remote web panel opened from another machine (not supported). Copy the config into the webhook field of state.json and restart DSH.",
   "bridge.path": "Or edit it yourself:",
   "bridge.retry": "Retry",
   "bridge.snippet": "Copy config snippet",
