@@ -3,10 +3,12 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.1.3] - 2026-11-18
 
 ### Fixed
 
+- **限流不再被当成测试失败**：测试请求返回 429（「操作太频繁」）时，面板只提示这句话，不再把没有结果对象的响应当成一次测试结论。此前这类被拒绝的请求会把徽章从「最近测试成功」改成红色失败，抹掉上一次真实结果。
+- **旧轮询不再覆盖更新的状态**：先发出、后返回的 `/status` 在新测试失败或新 Webhook 保存之后落地时，整份过期响应直接丢弃——不会再把失败徽章改回旧的成功，也不会把面板退回旧地址；首次配置时也不会再因此重新弹出已关闭的配置表单。
 - **单独点「发送测试推送」不再与徽章打架**：接口返回失败时，面板立即按响应更新当前通道的徽章与持久化提示，不再等下一次轮询（此前会同时显示「最近测试失败」和旧的「最近测试成功」）。属于其他通道或比当前更旧的结果不会被应用。
 - **旧通道的未落盘结果不再清空新通道的有效记录**：合并改为先按当前通道过滤、再比较时间，避免「较新的旧通道结论先按时间胜出、随后因通道不匹配被丢弃」，连带把磁盘里那条可用记录一起丢掉；读取合并与常规保存两条路径都受影响。
 - **浅色模式下文字太淡**：余额数字改为按皮肤取色（浅色 `#9c5c00` / `#c62828` / `#1f7a35`，白底约 5:1），徽章、错误块与失败原因改用向标签色混合的墨水，不再直接使用白底上约 2:1 的橙色。
@@ -67,5 +69,6 @@ All notable changes to this project are documented here. Format follows
 - README 面板截图前置、补「先看三行」要点；适用范围与免 Key 边界并入安装节，不再单列小节。
 - GitHub About 描述收紧为一句：低余额推送 + 本机运行边界。
 
+[0.1.3]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.3
 [0.1.2]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.2
 [0.1.0]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.0
