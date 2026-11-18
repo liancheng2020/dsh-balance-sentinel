@@ -171,6 +171,25 @@ window.__ModuleLoader__.load({
       return lang
     }
 
+    // DSH marks the dark skin with <body data-ds-dark-theme> — the same contract
+    // the host's own UI reads. Follow that attribute instead of guessing from a
+    // colour probe: a light skin can still use a dark brand colour, and a probe
+    // would put the panel in the wrong mode on first paint.
+    function useDarkSkin() {
+      const [dark, setDark] = useState(true)
+      useEffect(() => {
+        const body = typeof document !== 'undefined' ? document.body : null
+        if (!body) return
+        const read = () => setDark(typeof body.hasAttribute === 'function' ? body.hasAttribute('data-ds-dark-theme') : true)
+        read()
+        if (typeof MutationObserver === 'undefined') return
+        const mo = new MutationObserver(read)
+        mo.observe(body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+        return () => mo.disconnect()
+      }, [])
+      return dark
+    }
+
     const T = {
       text: 'var(--dsw-alias-label-primary, #e8e8ea)',
       sub: 'var(--dsw-alias-label-secondary, #a0a0a8)',
@@ -187,36 +206,58 @@ window.__ModuleLoader__.load({
       success: 'var(--dsw-alias-state-success-primary, #34c759)',
       error: 'var(--dsw-alias-state-error-primary, #ff4d4f)',
     }
+    // Theme-following fills: color-mix() resolves against the host's --dsw-alias-*
+    // tokens, so one declaration is correct in both skins. The rgba() literals
+    // this replaces were tuned on the dark skin and turn into grey smudges on a
+    // white canvas.
+    const tint = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
+    const mix = (color, pct, base) => `color-mix(in srgb, ${color} ${pct}%, ${base})`
+    // Ink for text painted in a state colour: pulled towards the label colour so
+    // it darkens on white and lightens on black. The raw warn orange is only
+    // ~2:1 on a white card, which is why badges and amounts use this instead.
+    const ink = (color) => mix(color, 58, T.text)
+    // Ink for a badge filled with a saturated state colour: it must contrast with
+    // that colour (not with the page), so it is a constant in both skins.
+    const INK_ON_SOLID = '#0e0e11'
     const css = {
-      panel: { boxSizing: 'border-box', padding: '20px 22px', color: T.text, fontSize: 13, lineHeight: 1.6, overflowY: 'auto', height: '100%', background: T.base },
+      // The canvas comes from a custom property so the light skin can swap it for
+      // an opaque neutral (see the injected sheet); an inline bg would win over it.
+      panel: { boxSizing: 'border-box', padding: '20px 22px', color: T.text, fontSize: 13, lineHeight: 1.6, overflowY: 'auto', height: '100%', background: 'var(--sentinel-canvas, var(--dsw-alias-bg-base, #0e0e11))' },
       head: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
       titleWrap: { display: 'flex', alignItems: 'center', gap: 10 },
-      iconBadge: { width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, rgba(91,140,255,0.18), rgba(245,166,35,0.14))', border: `1px solid ${T.border}`, color: T.brand, flex: 'none' },
+      iconBadge: { width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tint(T.brand, 18)}, ${tint(T.warn, 14)})`, border: `1px solid ${T.border}`, color: T.brand, flex: 'none' },
       h1: { fontSize: 17, fontWeight: 650, margin: 0, letterSpacing: '0.2px', display: 'flex', alignItems: 'center', gap: 8 },
       live: { width: 7, height: 7, borderRadius: '50%', background: T.success },
       sub: { color: T.tertiary, fontSize: 12, margin: '3px 0 0' },
       btn: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.layer1, color: T.sub, cursor: 'pointer', transition: 'all .15s ease', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
       btnOutline: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: 'transparent', color: T.sub, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
-      btnPrimary: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(91,140,255,0.45)', background: 'rgba(91,140,255,0.16)', color: T.brand, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
-      hero: { background: `linear-gradient(135deg, rgba(91,140,255,0.10), ${T.layer1} 60%)`, border: `1px solid ${T.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 },
+      btnPrimary: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tint(T.brand, 45)}`, background: tint(T.brand, 16), color: T.brand, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
+      hero: { background: `linear-gradient(135deg, ${tint(T.brand, 10)}, var(--sentinel-surface, #1a1a1f) 60%)`, border: 'var(--sentinel-line-w, 1px) solid var(--sentinel-line, #2e2e36)', boxShadow: 'var(--sentinel-shadow, none)', borderRadius: 12, padding: '16px 18px', marginBottom: 14 },
       heroVal: { fontSize: 30, fontWeight: 700, lineHeight: 1.2 },
       metaDim: { fontSize: 11.5, color: T.tertiary, margin: '2px 0' },
-      banner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 10, border: `1px solid ${T.borderSoft}`, borderLeft: `3px solid ${T.brand}`, background: 'rgba(91,140,255,0.10)' },
+      banner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', padding: '9px 12px', marginBottom: 14, borderRadius: 10, border: 'var(--sentinel-line-w, 1px) solid var(--sentinel-line, #26262c)', borderLeft: `3px solid ${T.brand}`, background: tint(T.brand, 10) },
       bannerText: { fontSize: 12, color: T.sub },
-      card: { background: T.layer1, border: `1px solid ${T.borderSoft}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 },
+      card: { background: 'var(--sentinel-surface, #1a1a1f)', border: 'var(--sentinel-line-w, 1px) solid var(--sentinel-line, #26262c)', boxShadow: 'var(--sentinel-shadow, none)', borderRadius: 10, padding: '12px 14px', marginBottom: 12 },
       row: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 },
       cardTitle: { fontWeight: 600, fontSize: 13, color: T.text, display: 'flex', alignItems: 'center', gap: 7 },
-      badgeSoft: (c) => ({ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, color: c, border: `1px solid ${c}`, background: 'transparent', whiteSpace: 'nowrap', flex: 'none' }),
+      // A bare semantic colour at 10.5px is unreadable on a white card, so the ink
+      // is pulled towards the label colour (dark in the light skin, a touch
+      // lighter in the dark one) while the fill keeps the state's hue.
+      badgeSoft: (c) => ({ fontSize: 10.5, fontWeight: 600, padding: '2px 9px', borderRadius: 20, color: ink(c), border: `1px solid ${tint(c, 55)}`, background: tint(c, 12), whiteSpace: 'nowrap', flex: 'none' }),
       field: { marginBottom: 9 },
       fieldLabel: { display: 'block', fontSize: 11.5, color: T.tertiary, marginBottom: 4 },
-      helpBox: { padding: '9px 11px', marginBottom: 9, borderRadius: 8, border: `1px dashed ${T.border}`, background: T.base },
+      helpBox: { padding: '9px 11px', marginBottom: 9, borderRadius: 8, border: 'var(--sentinel-line-w, 1px) dashed var(--sentinel-dash, #2e2e36)', background: 'var(--sentinel-canvas, var(--dsw-alias-bg-base, #0e0e11))' },
       input: { boxSizing: 'border-box', width: '100%', font: 'inherit', fontSize: 12, padding: '7px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.base, color: T.text, outline: 'none' },
-      select: { boxSizing: 'border-box', width: '100%', font: 'inherit', fontSize: 12, padding: '7px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.base, color: T.text, outline: 'none', colorScheme: 'dark', cursor: 'pointer' },
+      // Native <select> popups ignore most styling: colorScheme is what makes
+      // Chromium render the list dark instead of grey-on-grey. It is applied at
+      // the call site from useDarkSkin() (see pushForm) rather than pinned here,
+      // or the light skin would still open a dark menu.
+      select: { boxSizing: 'border-box', width: '100%', font: 'inherit', fontSize: 12, padding: '7px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.base, color: T.text, outline: 'none', cursor: 'pointer' },
       option: { background: T.layer1, color: T.text },
       link: { color: T.brand, textDecoration: 'none', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 3, transition: 'opacity .15s' },
-      error: { color: T.error, fontSize: 12.5, padding: '12px 14px', background: 'rgba(255,77,79,0.08)', border: '1px solid rgba(255,77,79,0.3)', borderRadius: 10, marginBottom: 12 },
-      warnBox: { color: T.warn, fontSize: 12, padding: '10px 12px', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: 10, marginBottom: 12 },
-      bridgeBox: { padding: '12px 14px', background: T.layer1, border: `1px dashed ${T.border}`, borderRadius: 10, marginBottom: 12 },
+      error: { color: ink(T.error), fontSize: 12.5, padding: '12px 14px', background: tint(T.error, 8), border: `1px solid ${tint(T.error, 30)}`, borderRadius: 10, marginBottom: 12 },
+      warnBox: { color: ink(T.warn), fontSize: 12, padding: '10px 12px', background: tint(T.warn, 8), border: `1px solid ${tint(T.warn, 30)}`, borderRadius: 10, marginBottom: 12 },
+      bridgeBox: { padding: '12px 14px', background: 'var(--sentinel-surface, #1a1a1f)', border: 'var(--sentinel-line-w, 1px) dashed var(--sentinel-dash, #2e2e36)', borderRadius: 10, marginBottom: 12 },
       pathLine: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5, color: T.brand, marginTop: 6, wordBreak: 'break-all' },
       h2: { fontSize: 12, fontWeight: 600, margin: '0 0 10px', color: T.sub, textTransform: 'uppercase', letterSpacing: '0.6px' },
       foot: { marginTop: 8, paddingTop: 14, borderTop: `1px solid ${T.borderSoft}`, fontSize: 11.5, color: T.sub, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
@@ -244,10 +285,16 @@ window.__ModuleLoader__.load({
     // Critical uses a fixed red: some skins tint --dsw-alias-state-error-primary
     // pink, which turned a real 告急 amount into a near-white number.
     const levelColor = (l) => l === 'critical' ? '#ff4d4f' : l === 'warn' ? T.warn : T.success
+    // The balance amount is the panel's headline. The raw warn orange measures
+    // about 2:1 on a white card, so the light skin gets a darkened value through
+    // a custom property while the dark skin keeps the vivid one.
+    const levelVal = (l) => l === 'critical' ? 'var(--sentinel-val-critical, #ff4d4f)'
+      : l === 'warn' ? 'var(--sentinel-val-warn, #f5a623)' : 'var(--sentinel-val-success, #34c759)'
     const fmtTime = (iso) => { if (!iso) return ''; try { return new Date(iso).toLocaleTimeString(LANG === 'en' ? 'en-US' : 'zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) } catch { return String(iso) } }
 
     function SentinelPanel() {
       LANG = useActiveLang()
+      const dark = useDarkSkin()
       const [nonce, setNonce] = useState(0)
       const [host, setHost] = useState(null)
       const [bridgeErr, setBridgeErr] = useState('')
@@ -264,6 +311,11 @@ window.__ModuleLoader__.load({
       const [warnDraft, setWarnDraft] = useState(null)
       const [critDraft, setCritDraft] = useState(null)
       const thTouched = useRef(false) // user typed in a threshold field
+      // Monotonic tokens for what the panel already knows locally. A /status
+      // request captures both when it leaves; anything that lands afterwards
+      // cannot be reflected in its response (see load()).
+      const verdictSeq = useRef(0) // a test verdict was folded into the badge
+      const configSeq = useRef(0)  // a save/disable replaced the webhook itself
       const [toast, setToast] = useState(null)
 
       useEffect(() => {
@@ -286,21 +338,32 @@ window.__ModuleLoader__.load({
 
       useEffect(() => {
         const sheet = `
+          /* Surfaces follow the host skin the way dsh-context does: the dark skin
+             keeps the layer-1 fill and lets the wallpaper show through, while the
+             light skin gets an opaque neutral canvas, hairline borders and the
+             host's level-1 shadow so cards read as objects instead of grey mush. */
+          .sentinel-panel { --sentinel-surface: var(--dsw-alias-bg-layer-1, #1a1a1f); --sentinel-line: var(--dsw-alias-border-l1, #26262c); --sentinel-dash: var(--dsw-alias-border-l2, #2e2e36); --sentinel-line-w: 1px; --sentinel-shadow: none; --sentinel-canvas: var(--dsw-alias-bg-base, #0e0e11); --sentinel-val-warn: var(--dsw-alias-state-warn-primary, #f5a623); --sentinel-val-critical: #ff4d4f; --sentinel-val-success: var(--dsw-alias-state-success-primary, #34c759); }
+          /* Light skin: the vivid state colours land at ~2:1 on white, so the
+             headline amount uses a darkened ink. These values measure above 5:1
+             against #ffffff and #f4f6f8. */
+          body:not([data-ds-dark-theme]) .sentinel-panel { --sentinel-surface: var(--dsw-alias-bg-layer-1, #ffffff); --sentinel-line: var(--dsw-alias-border-l3, #e3e6ea); --sentinel-dash: var(--dsw-alias-border-l4, #d5d9de); --sentinel-line-w: 0.5px; --sentinel-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(0,0,0,0.06)); --sentinel-canvas: var(--dsw-static-neutral-bluish-75, #f4f6f8); --sentinel-val-warn: #9c5c00; --sentinel-val-critical: #c62828; --sentinel-val-success: #1f7a35; }
           .sentinel-panel::-webkit-scrollbar { width: 8px; }
           .sentinel-panel::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 8px; }
           .sentinel-btn:hover { border-color: ${T.brand}; color: ${T.text}; background: ${T.hover}; }
           .sentinel-link:hover { opacity: 0.75; }
           .sentinel-toast { position: fixed; z-index: 999; pointer-events: none; display: flex; align-items: flex-start; gap: 8px; box-sizing: border-box; max-width: 80vw; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; transform: translateX(-50%); }
-          .sentinel-toast-ok { background: rgba(52,199,89,0.16); border: 1px solid rgba(52,199,89,0.65); color: ${T.text}; }
-          .sentinel-toast-err { background: rgba(255,77,79,0.14); border: 1px solid rgba(255,77,79,0.65); color: ${T.text}; }
-          .sentinel-toast-icon { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #0e0e11; background: ${T.success}; }
+          .sentinel-toast-ok { background: ${tint(T.success, 16)}; border: 1px solid ${tint(T.success, 65)}; color: ${T.text}; }
+          .sentinel-toast-err { background: ${tint(T.error, 14)}; border: 1px solid ${tint(T.error, 65)}; color: ${T.text}; }
+          .sentinel-toast-icon { width: 18px; height: 18px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: ${INK_ON_SOLID}; background: ${T.success}; }
           .sentinel-toast-err .sentinel-toast-icon { background: ${T.error}; color: #fff; }
           .sentinel-toast-body { min-width: 0; }
           .sentinel-toast-title { font-weight: 650; }
           .sentinel-toast-sub { font-size: 12.5px; color: ${T.sub}; word-break: break-word; }
-          /* fixed red: some skins tint --dsw-alias-state-error-primary pink */
+          /* fixed red: some skins tint --dsw-alias-state-error-primary pink.
+             Follow the host's skin attribute rather than the OS preference: the
+             two can disagree (dark app on a light desktop). */
           .sentinel-th-bad { color: #ff4d4f; }
-          @media (prefers-color-scheme: light) { .sentinel-th-bad { color: #d93025; } }
+          body:not([data-ds-dark-theme]) .sentinel-th-bad { color: #d93025; }
           @media (prefers-reduced-motion: reduce) { .sentinel-toast { animation: none !important; } }
         `
         let el = document.getElementById('sentinel-style')
@@ -318,13 +381,35 @@ window.__ModuleLoader__.load({
         let attempt = 0
         let seeded = false
         const load = async () => {
+          // Ordering tokens taken when the request leaves, not when it returns.
+          const issued = verdictSeq.current
+          const issuedConfig = configSeq.current
           try {
             const res = await fetch(LOCAL_API + '/status', { headers: { Accept: 'application/json' } })
             if (!res.ok) throw new Error('http ' + res.status)
             const j = await res.json()
             if (cancelled) return
+            // One gate for the whole response. A save/disable that finished while
+            // this request was in flight owns the webhook section, so the snapshot
+            // predates it: drop it before touching state AND before the side
+            // effects below. `configured` drives the setup form, so letting an
+            // obsolete "not configured" snapshot through re-opened the form over
+            // a channel the user had just saved.
+            if (configSeq.current > issuedConfig) return
             attempt = 0
-            setBridgeErr(''); setHost(j)
+            setBridgeErr('')
+            setHost((prev) => {
+              if (!prev) return j
+              // Checked again at apply time: a save can complete between the
+              // gate above and this updater being flushed.
+              if (configSeq.current > issuedConfig) return prev
+              // A /status issued before the newest test result cannot contain
+              // it. Taking the snapshot verbatim put the previous green verdict
+              // back over a failure the user had just watched happen; keep the
+              // verdict the panel already shows in that case.
+              if (verdictSeq.current > issued && j.channel === prev.channel) return { ...j, verify: prev.verify }
+              return j
+            })
             // Auto-open the setup form once, not on every poll: a later refresh
             // must not re-open it under a user who just closed it.
             if (!seeded && !j.configured) setEditing(true)
@@ -394,12 +479,36 @@ window.__ModuleLoader__.load({
       // Shared by the standalone test button and the save+test flow. It owns no
       // busy state on purpose: the caller keeps one busy window, so a failed save
       // or a failed test can never leave a button stuck on "Saving…".
+      // Fold a verdict into the panel state right away. Waiting for the next poll
+      // left the badge showing the previous "succeeded" next to a message saying
+      // the test just failed, for up to a full poll interval.
+      const applyVerify = (j) => {
+        // Only a response that carries a verdict is a test result. A refused
+        // request (429 "操作太频繁", a rejected body, a dead bridge) says
+        // nothing about delivery, so inventing a verdict from `ok:false` used to
+        // paint a red "failed" over the last known-good result.
+        const v = j && j.verify
+        if (!v || j.stale) return
+        // This verdict is newer than any snapshot still in flight.
+        verdictSeq.current += 1
+        setHost((prev) => {
+          if (!prev) return prev
+          // A verdict for another endpoint (saved from a second window) must not
+          // land on this channel's badge.
+          if (v.channel && prev.channel && v.channel !== prev.channel) return prev
+          // Never let an older verdict overwrite a newer one that is already shown.
+          if (prev.verify && Number(prev.verify.at || 0) > Number(v.at || 0)) return prev
+          return { ...prev, verify: v }
+        })
+      }
+
       const sendTest = async () => {
         const j = await post('/test-push')
         // The config was repointed while this request was in flight, so the
         // verdict belongs to a webhook that is no longer in use: say so instead
         // of letting the user read it as the state of the current channel.
         if (j.stale) { showResult({ ok: false, message: t('push.testStale') }); return j }
+        applyVerify(j)
         const warn = j.persisted === false ? t('push.notPersisted') : ''
         showResult(j.ok
           ? { ok: true, message: t('push.testOk', { c: j.channel || '', n: j.chunks || 1 }), hint: warn }
@@ -418,6 +527,9 @@ window.__ModuleLoader__.load({
         try {
           const j = await post('/webhook', form)
           if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
+          // This response now owns the webhook section: a /status still in
+          // flight was built from the previous address and must not land.
+          configSeq.current += 1
           // The server decides what happens to the old test result: an unchanged
           // webhook keeps it, any edit drops it. Trust the response instead of
           // blanking locally and flashing "untested" on a no-op re-save.
@@ -445,6 +557,9 @@ window.__ModuleLoader__.load({
         try {
           const j = await post('/webhook', { channel: 'none' })
           if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
+          // Same rule as a save: a poll issued before this point still says the
+          // channel was configured.
+          configSeq.current += 1
           setHost((prev) => ({ ...(prev || {}), channel: 'none', configured: false, urlHost: '', secretSet: false, verify: null }))
           setEditing(false)
           showResult({ ok: true, message: t('push.disabled') })
@@ -506,7 +621,7 @@ window.__ModuleLoader__.load({
             h('div', { style: css.row },
               h('span', { style: css.cardTitle }, h(BellIcon, { size: 16 }), t('meta.title')),
               h('span', { style: css.badgeSoft(levelColor(level)) }, t('level.' + level))),
-            h('div', { style: { ...css.heroVal, color: levelColor(level) } }, `${sym(bal.currency)}${Number(bal.value).toFixed(2)}`),
+            h('div', { style: { ...css.heroVal, color: levelVal(level) } }, `${sym(bal.currency)}${Number(bal.value).toFixed(2)}`),
             h('div', { style: { display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 } },
               h('a', { style: css.link, className: 'sentinel-link', href: TOP_UP, target: '_blank', rel: 'noreferrer' }, t('hero.topup'), h('span', null, '↗')),
               h('span', { style: css.metaDim }, t('hero.checkedAt', { t: fmtTime(bal.at) }))),
@@ -536,7 +651,7 @@ window.__ModuleLoader__.load({
         h('div', { style: css.field },
           h('label', { style: css.fieldLabel, htmlFor: 'sentinel-chan' }, t('push.field.channel')),
           h('select', {
-            id: 'sentinel-chan', style: css.select, value: form.channel,
+            id: 'sentinel-chan', style: { ...css.select, colorScheme: dark ? 'dark' : 'light' }, value: form.channel,
             onChange: (e) => setForm({ channel: e.target.value, url: '', secret: '' }),
           }, CHANNELS.map((c) => h('option', { key: c, value: c, style: css.option }, t('chan.' + c))))),
         h('div', { style: css.field },
@@ -575,7 +690,13 @@ window.__ModuleLoader__.load({
       // an old success is dropped server-side the moment the webhook changes.
       const verifyInfo = host?.verify || null
       const connState = !host?.configured ? 'off' : !verifyInfo ? 'untested' : verifyInfo.ok ? 'verified' : 'failed'
-      const connColor = connState === 'verified' ? T.success : connState === 'failed' ? T.error : connState === 'off' ? T.warn : T.sub
+      // One colour per state, so the dot and the badge agree and neither reads as
+      // "disabled": grey means nothing is set up, blue means set up but unproven,
+      // green and red mean the last test actually landed or failed.
+      const connColor = connState === 'verified' ? T.success
+        : connState === 'failed' ? T.error
+          : connState === 'untested' ? T.brand
+            : T.sub // off: a secondary grey, not the dimmed token (too faint on white)
       const connLine = connState === 'verified' ? t('push.verifiedAt', { t: fmtTime(verifyInfo.at) })
           + (verifyInfo.persisted === false ? ' · ' + t('push.notPersisted') : '')
         : connState === 'failed'
@@ -585,10 +706,21 @@ window.__ModuleLoader__.load({
 
       const pushSummary = () => h('div', { style: css.card },
         h('div', { style: css.row },
-          h('span', { style: css.cardTitle }, h('span', { style: { width: 8, height: 8, borderRadius: '50%', background: connColor, flex: 'none' } }), t('push.channel', { c: t('chan.' + host.channel) })),
+          h('span', { style: css.cardTitle },
+            h('span', {
+              style: {
+                width: 8, height: 8, borderRadius: '50%', flex: 'none', background: connColor,
+                // A soft ring keeps the state readable by more than hue alone and
+                // stops the dot from looking like a stray speck on a wide card.
+                boxShadow: connState === 'off' ? 'none' : `0 0 0 3px ${tint(connColor, 20)}`,
+              },
+            }),
+            t('push.channel', { c: t('chan.' + host.channel) })),
           h('span', { style: css.badgeSoft(connColor) }, t('push.' + connState))),
         host.urlHost ? h('div', { style: css.metaDim }, t('push.current', { h: host.urlHost })) : null,
-        connLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? T.error : undefined } }, connLine) : null,
+        // Failure text uses the same mixed ink as css.error: some skins tint the
+        // raw error token pink, which is unreadable at 11.5px on a light card.
+        connLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? ink(T.error) : undefined } }, connLine) : null,
         h('div', { style: css.metaDim }, host.configured ? t('push.hint') : t('push.empty')),
         h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
           h('button', {

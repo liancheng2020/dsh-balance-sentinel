@@ -873,6 +873,29 @@ await atest('M14 a cycle does not carry a verdict onto a replaced webhook', asyn
   assert.equal(s.verify, null, 'a verdict for the old webhook must not follow the config')
   assert.equal(loadState().verify, null, 'and it must not be written back either')
 })
+// A newer unwritten verdict for the OLD webhook must not win on time and then be
+// thrown away, taking the file's valid record for the current webhook with it:
+// filter by channel first, compare times second.
+await atest('M15 a stale verdict for another webhook keeps the current record', async () => {
+  const s = fresh()
+  const A = { channel: 'wecom', url: 'http://127.0.0.1:1/a', secret: '' }
+  const B = { channel: 'wecom', url: 'http://127.0.0.1:1/b', secret: '' }
+  s.webhook = B
+  s.verify = { at: 1000, ok: true, channel: 'wecom', error: null, fp: webhookFingerprint(B), persisted: true }
+  assert.equal(saveState(s, undefined, { own: ['webhook', 'verify'] }), true)
+
+  const stale = { at: 2000, ok: false, channel: 'wecom', error: 'stale', fp: webhookFingerprint(A), persisted: false }
+  s.verify = { ...stale }
+  mergeStateFromDisk(s)
+  assert.equal(s.verify.ok, true, 'the valid record for the current webhook must win')
+  assert.equal(s.verify.fp, webhookFingerprint(B))
+
+  // The regular save path (a monitor cycle) must not change that verdict either.
+  s.verify = { ...stale }
+  assert.equal(saveState(s), true)
+  assert.equal(s.verify.ok, true, 'a monitor-cycle save must keep the current record')
+  assert.equal(loadState().verify.ok, true, 'and the file still holds it')
+})
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exitCode = failed ? 1 : 0

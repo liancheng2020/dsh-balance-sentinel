@@ -57,6 +57,7 @@ If the balance is already below a threshold when you connect, one current-state 
 - **Failures are traceable and retryable**: pending alerts persist; business failures back off 10 min and hold after 3 (manual retry in the panel); timeouts and dead response bodies are "delivery unconfirmed" — held immediately, never auto re-sent; a failed state save writes a fallback receipt, so restarts and multiple instances still do not re-send it (unconfirmed restores as held, never as sent). If neither the state nor the receipt can be written, the duplicate risk is logged explicitly.
 - **No wedge, no duplicate across instances**: host queries have a 15s deadline and the scheduler survives any exception; desktop + web sharing `DSH_HOME` push each transition exactly once (whole-cycle lock + disk merge).
 - **Channels**: WeCom / DingTalk / Feishu (card) / Bark / ServerChan / Telegram / generic webhook; auto-chunking; HTTP-200 business failures count as failures.
+- **Follows the host skin**: the panel reads `data-ds-dark-theme`, so a light skin gets white cards, hairline borders and a soft shadow, with badges, toasts and native select menus switching with it.
 - Balance is the **official account number**; v1 ships no cost estimates.
 
 ## Config (optional, profile cordis.patch.yml)

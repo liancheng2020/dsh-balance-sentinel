@@ -97,8 +97,15 @@ const findById = (node, id) => [...walk(node)].find((n) => n.props && n.props.id
 
 const els = {}
 const docListeners = {}
+// DSH marks the dark skin with this body attribute; the panel follows it.
+const bodyAttrs = new Set(['data-ds-dark-theme'])
 global.document = {
   visibilityState: 'visible',
+  body: {
+    hasAttribute: (n) => bodyAttrs.has(n),
+    setAttribute: (n) => bodyAttrs.add(n),
+    removeAttribute: (n) => bodyAttrs.delete(n),
+  },
   getElementById: (id) => els[id] || null,
   createElement: (tag) => ({ tag, id: '', textContent: '', style: {} }),
   head: { appendChild: (el) => { if (el.id) els[el.id] = el } },
@@ -123,17 +130,37 @@ let webhookFails = 0
 let testPushFails = 0
 let testPushStale = 0
 let testPushUnpersisted = 0
+let testPushThrottled = 0
+// Hold the next /status response so a poll can be issued and answered out of
+// order (the response is frozen at request time, like a real slow request).
+let statusHold = 0
+const heldStatus = []
+// One-shot override for the next successful save, so a test can repoint the
+// webhook to another channel/host (the mock otherwise echoes the old one).
+let webhookReply = null
+const releaseStatus = () => {
+  const h = heldStatus.shift()
+  if (!h) return false
+  h.resolve({ ok: true, status: 200, json: async () => h.snap })
+  return true
+}
 const posts = []
 const fetchMock = async (url, init) => {
   const u = String(url)
   if (u.startsWith('http://127.0.0.1:17430/status')) {
     statusCalls++
     if (statusFails > 0) { statusFails--; throw new Error('ECONNREFUSED') }
+    if (statusHold > 0) {
+      statusHold--
+      const snap = JSON.parse(JSON.stringify(HOST))
+      return new Promise((resolve) => { heldStatus.push({ snap, resolve }) })
+    }
     return { ok: true, status: 200, json: async () => HOST }
   }
   if (u.startsWith('http://127.0.0.1:17430/webhook')) {
     const body = JSON.parse(init?.body || '{}')
     posts.push(['webhook', body])
+    if (webhookReply) { const r = webhookReply; webhookReply = null; return { ok: true, status: 200, json: async () => r } }
     const off = body.channel === 'none'
     if (webhookFails > 0) {
       webhookFails--
@@ -143,19 +170,28 @@ const fetchMock = async (url, init) => {
   }
   if (u.startsWith('http://127.0.0.1:17430/test-push')) {
     posts.push(['test-push'])
+    // The bridge answers 429 with no verdict at all: the request was refused, so
+    // nothing is known about delivery.
+    if (testPushThrottled > 0) {
+      testPushThrottled--
+      return { ok: true, status: 429, json: async () => ({ ok: false, code: 'too-frequent', message: '操作太频繁，请 3 秒后再试' }) }
+    }
+    const verdict = (ok, extra = {}) => ({
+      at: Date.now(), ok, channel: 'wecom', error: ok ? null : 'errcode 93000 invalid webhook', persisted: true, ...extra,
+    })
     if (testPushStale > 0) {
       testPushStale--
       return { ok: true, status: 200, json: async () => ({ ok: true, stale: true, chunks: 1, channel: 'wecom' }) }
     }
     if (testPushUnpersisted > 0) {
       testPushUnpersisted--
-      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, persisted: false }) }
+      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, persisted: false, verify: verdict(false, { persisted: false }) }) }
     }
     if (testPushFails > 0) {
       testPushFails--
-      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, hint: 'Webhook 地址无效' }) }
+      return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, hint: 'Webhook 地址无效', verify: verdict(false) }) }
     }
-    return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom' }) }
+    return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom', verify: verdict(true) }) }
   }
   if (u.startsWith('http://127.0.0.1:17430/prefs')) {
     const body = JSON.parse(init?.body || '{}')
@@ -401,7 +437,7 @@ await atest('P12 support boundary shown in zh/en; bridge-down names remote panel
 
 // Regression: a server-side rejection used to return before clearing `busy`, so
 // the save button stayed on "保存中…" and disabled forever.
-await atest('P14 save failure clears busy; edit then retry succeeds', async () => {
+await atest('P13 save failure clears busy; edit then retry succeeds', async () => {
   resetHost(); HOST.configured = false; HOST.channel = 'none'
   webhookFails = 1
   const { render, dispose } = boot()
@@ -428,7 +464,7 @@ await atest('P14 save failure clears busy; edit then retry succeeds', async () =
   webhookFails = 0
   dispose()
 })
-await atest('P15 configured vs connected: untested / verified / failed', async () => {
+await atest('P14 configured vs connected: untested / verified / failed', async () => {
   resetHost(); HOST.verify = null
   let b = boot(); b.render(); await sleep(30)
   let txt = textOf(b.render())
@@ -452,7 +488,7 @@ await atest('P15 configured vs connected: untested / verified / failed', async (
 // a red "must be positive" line, because the drafts were seeded only by a /status
 // that may land late (or not at all). An untouched draft must fall back to the
 // host value instead of rendering ''.
-await atest('P17 thresholds never render blank; fallback when host omits them', async () => {
+await atest('P15 thresholds never render blank; fallback when host omits them', async () => {
   resetHost(); delete HOST.thresholds
   const { render, dispose } = boot()
   render()
@@ -485,7 +521,7 @@ await atest('P16 save&test failure still re-enables the button', async () => {
 })
 // A verdict can arrive after another page repointed the webhook; the panel must
 // say it was discarded instead of letting it read as the new channel's result.
-await atest('P19 stale verdict is explained, never shown as success', async () => {
+await atest('P17 stale verdict is explained, never shown as success', async () => {
   resetHost()
   testPushStale = 1
   const { render, dispose } = boot()
@@ -498,7 +534,7 @@ await atest('P19 stale verdict is explained, never shown as success', async () =
   if (txt.includes('测试推送成功')) throw new Error('stale verdict must not read as success')
   dispose()
 })
-await atest('P20 unpersisted verdict is shown and labelled', async () => {
+await atest('P18 unpersisted verdict is shown and labelled', async () => {
   resetHost()
   testPushUnpersisted = 1
   const { render, dispose } = boot()
@@ -511,8 +547,84 @@ await atest('P20 unpersisted verdict is shown and labelled', async () => {
   if (!txt.includes('重启后会丢失')) throw new Error('unpersisted result must say so')
   dispose()
 })
+// The panel must follow the host skin attribute, not the OS preference: a dark
+// app on a light desktop keeps the dark palette (and a dark <select> popup).
+// Grey for "saved but untested" read as a disabled control; each state now owns
+// a token so the dot and the badge cannot drift back to a neutral grey.
+await atest('P19 each connection state gets its own colour', async () => {
+  const cases = [
+    [null, '已配置，待测试', 'brand-primary'],
+    [{ at: Date.now(), ok: true, channel: 'wecom', error: null }, '最近测试成功', 'state-success-primary'],
+    [{ at: Date.now(), ok: false, channel: 'wecom', error: 'errcode 93000' }, '最近测试失败', 'state-error-primary'],
+  ]
+  for (const [verify, label, token] of cases) {
+    resetHost(); HOST.verify = verify
+    const b = boot()
+    b.render()
+    await sleep(30)
+    const node = b.render()
+    const badge = [...walk(node)].find((n) => n.props && n.props.style && n.props.style.color
+      && String(n.props.style.color).includes(token) && textOf(n).includes(label))
+    if (!badge) throw new Error(`state "${label}" must use ${token}`)
+    b.dispose()
+  }
+})
+// A standalone test used to update only the inline result: the badge kept the
+// previous green "succeeded" until the next poll landed.
+await atest('P20 a failed test flips the badge without waiting for a poll', async () => {
+  resetHost()
+  HOST.verify = { at: Date.now() - 60000, ok: true, channel: 'wecom', error: null, persisted: true }
+  testPushFails = 1
+  const { render, dispose } = boot()
+  render()
+  await sleep(30)
+  if (!textOf(render()).includes('最近测试成功')) throw new Error('precondition: old success should be visible')
+  await findButton(render(), '发送测试推送').props.onClick()
+  await sleep(80)
+  const txt = textOf(render())
+  if (!txt.includes('最近测试失败')) throw new Error('badge must flip immediately: ' + txt.slice(0, 240))
+  if (txt.includes('最近测试成功')) throw new Error('the old success must not stay on screen')
+  testPushFails = 0
+  dispose()
+})
+// The light skin's vivid state colours land near 2:1 on white, so the headline
+// amount switches to a darkened value through a custom property.
+await atest('P21 light skin darkens the headline amount', async () => {
+  resetHost()
+  bodyAttrs.delete('data-ds-dark-theme')
+  const b = boot()
+  b.render()
+  await sleep(30)
+  const node = b.render()
+  const amount = [...walk(node)].find((n) => n.props && n.props.style && n.props.style.color
+    && String(n.props.style.color).includes('--sentinel-val-'))
+  if (!amount) throw new Error('amount must use a skin-aware colour variable')
+  const sheet = els['sentinel-style'] ? els['sentinel-style'].textContent : ''
+  if (!sheet.includes('--sentinel-val-warn: #9c5c00')) throw new Error('light warn ink missing from the sheet')
+  if (!sheet.includes('--sentinel-val-critical: #c62828')) throw new Error('light critical ink missing from the sheet')
+  bodyAttrs.add('data-ds-dark-theme')
+  b.dispose()
+})
+await atest('P22 host skin drives colorScheme and the light palette', async () => {
+  resetHost(); HOST.configured = false; HOST.channel = 'none'
+  bodyAttrs.add('data-ds-dark-theme')
+  let b = boot(); b.render(); await sleep(30)
+  let sel = findById(b.render(), 'sentinel-chan')
+  if (sel.props.style.colorScheme !== 'dark') throw new Error('dark skin must open a dark menu: ' + sel.props.style.colorScheme)
+  const sheet = els['sentinel-style'] ? els['sentinel-style'].textContent : ''
+  if (!sheet.includes('body:not([data-ds-dark-theme]) .sentinel-panel')) throw new Error('light palette override missing from the injected sheet')
+  if (!sheet.includes('--sentinel-surface')) throw new Error('surface variable missing from the injected sheet')
+  b.dispose()
 
-await atest('P13 zh/en catalogs have identical keys', async () => {
+  bodyAttrs.delete('data-ds-dark-theme')
+  b = boot(); b.render(); await sleep(30)
+  sel = findById(b.render(), 'sentinel-chan')
+  if (sel.props.style.colorScheme !== 'light') throw new Error('light skin must open a light menu: ' + sel.props.style.colorScheme)
+  b.dispose()
+  bodyAttrs.add('data-ds-dark-theme')
+})
+
+await atest('P23 zh/en catalogs have identical keys', async () => {
   const iZh = clientCode.indexOf('      zh: {')
   const iEn = clientCode.indexOf('      en: {')
   if (iZh < 0 || iEn < 0 || iEn < iZh) throw new Error('catalogs not found')
@@ -524,7 +636,7 @@ await atest('P13 zh/en catalogs have identical keys', async () => {
   if (missEn.length || missZh.length) throw new Error(`missing en: ${missEn.join(',') || '-'} | missing zh: ${missZh.join(',') || '-'}`)
 })
 
-await atest('P14 threshold save confirms via top toast, gone in 2s', async () => {
+await atest('P24 threshold save confirms via top toast, gone in 2s', async () => {
   resetHost()
   const { render, dispose } = boot()
   render()
@@ -544,7 +656,7 @@ await atest('P14 threshold save confirms via top toast, gone in 2s', async () =>
   if (textOf(render()).includes('阈值已保存')) throw new Error('toast should fade after 2s and leave no inline copy')
   dispose()
 })
-await atest('P15 error notice is not auto-dismissed', async () => {
+await atest('P25 error notice is not auto-dismissed', async () => {
   resetHost(); HOST.configured = false; HOST.channel = 'none'
   const { render, dispose } = boot()
   render()
@@ -562,7 +674,7 @@ await atest('P15 error notice is not auto-dismissed', async () => {
   dispose()
 })
 
-await atest('P16 poll clears a stale pending banner without any click', async () => {
+await atest('P26 poll clears a stale pending banner without any click', async () => {
   resetHost(); HOST.pending = { kind: 'warn', cause: null, hold: false, ambiguous: false, attempts: 0, lastError: null }
   const b = boot()
   b.render()
@@ -575,8 +687,9 @@ await atest('P16 poll clears a stale pending banner without any click', async ()
   if (textOf(b.render()).includes('待发送')) throw new Error('poll did not clear the banner')
   b.dispose()
 })
-await atest('P17 polls pause while hidden and refresh on return', async () => {
+await atest('P27 polls pause while hidden and refresh on return', async () => {
   resetHost()
+  const listenersBefore = (docListeners.visibilitychange || []).length
   const b = boot()
   b.render()
   await sleep(30)
@@ -587,10 +700,16 @@ await atest('P17 polls pause while hidden and refresh on return', async () => {
   global.document.visibilityState = 'visible'
   global.document.dispatch('visibilitychange'); await sleep(30)
   if (statusCalls !== base + 1) throw new Error('returning to the panel must refresh once')
+  // Unmount has to leave nothing behind: no live interval, no document listener.
   b.dispose()
+  if (!b.intervals.length || !b.intervals[0].cleared) throw new Error('unmount must clear the poll interval')
+  if ((docListeners.visibilitychange || []).length !== listenersBefore) throw new Error('unmount must drop the visibilitychange listener')
+  const afterDispose = statusCalls
+  global.document.dispatch('visibilitychange'); await sleep(30)
+  if (statusCalls !== afterDispose) throw new Error('a disposed panel must not poll')
   global.document.visibilityState = 'visible'
 })
-await atest('P18 background poll keeps in-progress threshold edits', async () => {
+await atest('P28 background poll keeps in-progress threshold edits', async () => {
   resetHost()
   const b = boot()
   b.render()
@@ -602,6 +721,125 @@ await atest('P18 background poll keeps in-progress threshold edits', async () =>
   b.tick(); await sleep(40)
   node = b.render()
   if (findById(node, 'sentinel-warn').props.value !== '30') throw new Error('poll overwrote an unsaved edit')
+  b.dispose()
+})
+
+// Regression: a throttled test pushed the panel into "failed" for a request that
+// never left the machine. A 429 carries no verdict, so it must only be reported.
+await atest('P29 a 429 test keeps the last success and only warns', async () => {
+  resetHost()
+  HOST.verify = { at: Date.now() - 60000, ok: true, channel: 'wecom', error: null, persisted: true }
+  testPushThrottled = 1
+  const b = boot()
+  b.render()
+  await sleep(30)
+  if (!textOf(b.render()).includes('最近测试成功')) throw new Error('precondition: the last success must be visible')
+  await findButton(b.render(), '发送测试推送').props.onClick()
+  await sleep(80)
+  const txt = textOf(b.render())
+  if (!txt.includes('操作太频繁')) throw new Error('429 must be explained: ' + txt.slice(0, 240))
+  if (!txt.includes('最近测试成功')) throw new Error('a refused request must not rewrite the badge')
+  if (txt.includes('最近测试失败')) throw new Error('no verdict came back, so nothing may read as failed')
+  b.dispose()
+})
+
+// Regression: a /status that was already in flight when the test failed used to
+// land afterwards and put the old green verdict back on the badge.
+await atest('P30 a late /status cannot undo a newer failed test', async () => {
+  resetHost()
+  HOST.verify = { at: Date.now() - 60000, ok: true, channel: 'wecom', error: null, persisted: true }
+  const b = boot()
+  b.render()
+  await sleep(30)
+  if (!textOf(b.render()).includes('最近测试成功')) throw new Error('precondition: the old success must be visible')
+  statusHold = 1
+  b.tick() // poll leaves now, carrying the old success; its answer is held back
+  await sleep(20)
+  if (!heldStatus.length) throw new Error('the poll was not held')
+  testPushFails = 1
+  await findButton(b.render(), '发送测试推送').props.onClick()
+  await sleep(80)
+  if (!textOf(b.render()).includes('最近测试失败')) throw new Error('precondition: the test must fail first')
+  releaseStatus() // the slow poll finally answers
+  await sleep(40)
+  const txt = textOf(b.render())
+  if (!txt.includes('最近测试失败')) throw new Error('a stale poll resurrected the old success: ' + txt.slice(0, 240))
+  if (txt.includes('最近测试成功')) throw new Error('the old success must not come back')
+  testPushFails = 0
+  b.dispose()
+})
+
+// Regression: saving a new webhook used to be undone by a /status that was
+// already in flight — the panel fell back to the previous address and to its
+// "last test succeeded" badge, hiding that the new endpoint was never tested.
+await atest('P31 a late /status cannot undo a saved webhook', async () => {
+  resetHost()
+  HOST.verify = { at: Date.now() - 60000, ok: true, channel: 'wecom', error: null, persisted: true }
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let txt = textOf(b.render())
+  if (!txt.includes('qyapi.weixin.qq.com') || !txt.includes('最近测试成功')) throw new Error('precondition: old address + success must be visible')
+  statusHold = 1
+  b.tick() // poll leaves now, carrying the old webhook; its answer is held back
+  await sleep(20)
+  if (!heldStatus.length) throw new Error('the poll was not held')
+
+  await findButton(b.render(), '修改').props.onClick()
+  findById(b.render(), 'sentinel-chan').props.onChange({ target: { value: 'dingtalk' } })
+  findById(b.render(), 'sentinel-url').props.onChange({ target: { value: 'https://oapi.dingtalk.com/robot/send?access_token=t' } })
+  webhookReply = { ok: true, channel: 'dingtalk', configured: true, urlHost: 'oapi.dingtalk.com', secretSet: true }
+  await findButton(b.render(), '仅保存').props.onClick()
+  await sleep(80)
+  txt = textOf(b.render())
+  if (!txt.includes('oapi.dingtalk.com') || !txt.includes('已配置，待测试')) throw new Error('precondition: the saved webhook must be shown: ' + txt.slice(0, 240))
+  if (txt.includes('qyapi.weixin.qq.com')) throw new Error('precondition: the old address must be gone')
+
+  // Keep the mock host in step with the save, so only the held response can be stale.
+  HOST.channel = 'dingtalk'; HOST.urlHost = 'oapi.dingtalk.com'; HOST.verify = null
+  releaseStatus() // the slow poll finally answers with the old webhook
+  await sleep(40)
+  txt = textOf(b.render())
+  if (!txt.includes('oapi.dingtalk.com')) throw new Error('a stale poll restored the old address: ' + txt.slice(0, 240))
+  if (txt.includes('qyapi.weixin.qq.com')) throw new Error('the replaced address must not come back')
+  if (!txt.includes('已配置，待测试')) throw new Error('the new endpoint must stay untested: ' + txt.slice(0, 240))
+  if (txt.includes('最近测试成功')) throw new Error('the old verdict must not return for the new webhook')
+  b.dispose()
+})
+
+// Regression: the first-use auto-open ran on any early /status, including one
+// that had been superseded by a save. The summary said "configured" while the
+// setup form popped back open under it.
+await atest('P32 a stale /status cannot reopen the form after saving', async () => {
+  resetHost()
+  Object.assign(HOST, { configured: false, channel: 'none', urlHost: '', secretSet: false, verify: null })
+  const b = boot()
+  b.render()
+  await sleep(30)
+  if (!findById(b.render(), 'sentinel-url')) throw new Error('precondition: first use must open the setup form')
+
+  statusHold = 1
+  await findButton(b.render(), '刷新').props.onClick()
+  b.render() // the refresh restarts the poll effect; that first /status is held
+  await sleep(20)
+  if (!heldStatus.length) throw new Error('the refresh poll was not held')
+
+  findById(b.render(), 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
+  webhookReply = { ok: true, channel: 'wecom', configured: true, urlHost: 'qyapi.weixin.qq.com', secretSet: false }
+  await findButton(b.render(), '仅保存').props.onClick()
+  await sleep(80)
+  let node = b.render()
+  if (findById(node, 'sentinel-url')) throw new Error('precondition: a successful save must close the form')
+  if (!textOf(node).includes('已配置，待测试')) throw new Error('precondition: the saved channel must read untested')
+
+  // Keep the mock host in step with the save, so only the held response is stale.
+  Object.assign(HOST, { configured: true, channel: 'wecom', urlHost: 'qyapi.weixin.qq.com' })
+  releaseStatus() // the obsolete "not configured" snapshot finally answers
+  await sleep(40)
+  node = b.render()
+  if (findById(node, 'sentinel-url')) throw new Error('an obsolete /status reopened the setup form')
+  const txt = textOf(node)
+  if (!txt.includes('已配置，待测试')) throw new Error('the summary must still read untested: ' + txt.slice(0, 240))
   b.dispose()
 })
 
