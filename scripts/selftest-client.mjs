@@ -202,12 +202,8 @@ const fetchMock = async (url, init) => {
     }
     return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom', verify: verdict(true) }) }
   }
-  if (u.startsWith('http://127.0.0.1:17430/notify')) {
-    const body = JSON.parse(init?.body || '{}')
-    posts.push(['notify', body])
-    HOST.signature = !!body.signature
-    return { ok: true, status: 200, json: async () => ({ ok: true, signature: HOST.signature }) }
-  }
+  // No /notify route on purpose: the panel's footer switch is gone, so the client
+  // calling it again would throw 'unexpected fetch' here and fail the suite.
   if (u.startsWith('http://127.0.0.1:17430/prefs')) {
     const body = JSON.parse(init?.body || '{}')
     posts.push(['prefs', body])
@@ -945,29 +941,18 @@ await atest('P34 an unconfigured form can be cancelled without saving', async ()
   b.dispose()
 })
 
-// The footer switch is the only way a user who never edits YAML can opt in, so it
-// has to start off and round-trip through the bridge.
-await atest('P35 the push card can switch the install footer', async () => {
+// The footer switch was removed together with the built-in install line. The card
+// must not offer a control that no longer does anything, nor advertise it.
+await atest('P35 the push card offers no footer switch', async () => {
   resetHost()
-  HOST.signature = false
   const b = boot()
   b.render()
   await sleep(30)
-  let box = findById(b.render(), 'sentinel-sig')
-  if (!box) throw new Error('the push card must offer the footer switch')
-  if (box.props.checked) throw new Error('the footer must start off')
-  const label = textOf(b.render())
-  if (!label.includes('（默认关闭')) throw new Error('the hint must read as a bracketed note: ' + label.slice(0, 200))
-  if (label.includes(' 默认关闭')) throw new Error('a full-width bracket must not be preceded by a space')
-  await box.props.onChange({ target: { checked: true } })
-  await sleep(20)
-  box = findById(b.render(), 'sentinel-sig')
-  if (!box.props.checked) throw new Error('the switch must stay on once the bridge accepts it')
-  const sent = posts.filter(([p]) => p === 'notify').pop()
-  if (!sent || sent[1].signature !== true) throw new Error('the switch must be saved as true: ' + JSON.stringify(sent))
-  await box.props.onChange({ target: { checked: false } })
-  await sleep(20)
-  if (findById(b.render(), 'sentinel-sig').props.checked) throw new Error('the switch must turn off again')
+  const node = b.render()
+  if (findById(node, 'sentinel-sig')) throw new Error('the footer switch must be gone')
+  const label = textOf(node)
+  if (label.includes('附上安装链接')) throw new Error('the install-link wording must be gone: ' + label.slice(0, 200))
+  if (label.includes('署名')) throw new Error('the card must not advertise the optional footer: ' + label.slice(0, 200))
   b.dispose()
 })
 
@@ -981,14 +966,19 @@ await atest('P36 the push card keeps one line per fact', async () => {
   await sleep(30)
   let node = b.render()
   let txt = textOf(node)
-  if (!txt.includes('qyapi.weixin.qq.com')) throw new Error('the endpoint must stay visible')
-  if (!/\d{2}:\d{2}:\d{2}/.test(txt)) throw new Error('the test time must stay visible: ' + txt.slice(0, 200))
-  if (txt.includes('当前地址') || txt.includes('最近测试成功：')) {
+  // The address is labelled ("当前地址：…") and the card carries one static
+  // sentence saying what it is for; the test clock never comes back.
+  const metaNode = [...walk(node)].find((n) => textOf(n).startsWith('当前地址'))
+  if (!metaNode) throw new Error('the endpoint must stay visible')
+  const meta = textOf(metaNode)
+  if (!/^当前地址：qyapi\.weixin\.qq\.com$/.test(meta)) {
+    throw new Error('the address must be labelled: ' + meta)
+  }
+  if (txt.includes('最近测试成功：')) {
     throw new Error('address and time must share one line: ' + txt.slice(0, 200))
   }
-  if (txt.includes('保存即生效')) throw new Error('the save explanation belongs in the form, not the card')
-  if (!txt.includes('开启后告警尾部会多一行署名')) throw new Error('the card must keep the footer explanation')
-  // Actions stay left-aligned under the switch, never pushed to the right edge.
+  if (!txt.includes('低余额/恢复通知将推送到这里')) throw new Error('the card must say what it is for')
+  // Actions stay left-aligned under the card body, never pushed to the right edge.
   const actionRow = [...walk(node)].find((n) => n.props?.style?.display === 'flex'
     && [...walk(n)].some((c) => c.props?.type === 'button' && textOf(c).includes('发送测试推送')))
   if (!actionRow) throw new Error('the push actions must sit in their own row')
@@ -997,7 +987,7 @@ await atest('P36 the push card keeps one line per fact', async () => {
   }
   const flexRow = (n, gap) => [...walk(n)].some((x) => x.props?.style?.display === 'flex'
     && x.props.style.flexWrap === 'wrap' && x.props.style.marginTop === gap)
-  if (!flexRow(node, 10)) throw new Error('the action row must sit 10px below the switch')
+  if (!flexRow(node, 10)) throw new Error('the action row must sit 10px below the card body')
   // Two equal actions, so both buttons share one style object (no outline pair).
   const btnStyle = (label) => findButton(node, label).props.style
   if (JSON.stringify(btnStyle('修改')) !== JSON.stringify(btnStyle('发送测试推送'))) {
@@ -1007,31 +997,23 @@ await atest('P36 the push card keeps one line per fact', async () => {
   await findButton(node, '修改').props.onClick()
   node = b.render()
   txt = textOf(node)
-  if (!txt.includes('保存即生效')) throw new Error('the form should explain what saving does')
-  if (!flexRow(node, 10)) throw new Error('the form buttons must be spaced from the switch')
+  if (txt.includes('保存即生效')) throw new Error('the push-hint sentence lives on the summary card, not the form')
+  if (!flexRow(node, 10)) throw new Error('the form buttons must be spaced from the help text')
   b.dispose()
 })
 
-// Same ordering rule as a webhook save: a /status issued before the toggle still
-// reports the old value and must not flip the checkbox back under the user.
-await atest('P37 a late /status cannot undo the footer switch', async () => {
+// The edit form used to carry the same switch; it must be gone there too, so
+// there is no second surface that can look like an opt-in.
+await atest('P37 the edit form offers no footer switch either', async () => {
   resetHost()
-  HOST.signature = false
   const b = boot()
   b.render()
   await sleep(30)
-  statusHold = 1
-  b.tick(); await sleep(20)
-  if (!heldStatus.length) throw new Error('the poll was not held')
-  const box = findById(b.render(), 'sentinel-sig')
-  await box.props.onChange({ target: { checked: true } })
-  await sleep(20)
-  if (!findById(b.render(), 'sentinel-sig').props.checked) throw new Error('precondition: the switch must be on')
-  releaseStatus() // the held snapshot still says "off"
-  await sleep(40)
-  if (!findById(b.render(), 'sentinel-sig').props.checked) {
-    throw new Error('a stale /status turned the footer switch back off')
-  }
+  let node = b.render()
+  await findButton(node, '修改').props.onClick()
+  node = b.render()
+  if (findById(node, 'sentinel-sig')) throw new Error('the form must not offer the footer switch')
+  if (textOf(node).includes('附上安装链接')) throw new Error('the form must not mention the install link')
   b.dispose()
 })
 
@@ -1066,6 +1048,39 @@ await atest('P38 the edit button keeps its hairline border after cancelling', as
   if (/brand-primary/.test(hoverRule)) throw new Error('hover must not paint the border in the brand colour')
   if (!/border-color:\s*var\(--dsw-alias-border-l2/.test(hoverRule)) throw new Error('hover must keep the hairline border: ' + hoverRule)
   if (!/button:focus-visible[^{]*\{[^}]*outline/.test(sheet)) throw new Error('keyboard focus must keep a ring')
+  b.dispose()
+})
+
+// An equal warn/critical pair in YAML cannot be rejected without disabling the
+// plugin; the bridge normalises it to the defaults and flags it. The panel must
+// say so — otherwise the user sees 20/5 in the inputs with no idea why.
+await atest('P40 an equal YAML threshold pair is flagged and defaults are offered', async () => {
+  resetHost()
+  HOST.thresholds = { warn: 20, critical: 5 }
+  HOST.thresholdsAdjusted = true
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let node = b.render()
+  let txt = textOf(node)
+  if (!txt.includes('已回退默认 20/5')) throw new Error('the misconfiguration note must be shown: ' + txt.slice(0, 200))
+  if (findById(node, 'sentinel-warn').props.value !== '20' || findById(node, 'sentinel-crit').props.value !== '5') {
+    throw new Error('the inputs must offer the effective defaults')
+  }
+  // The offered defaults equal the shown values, so a dirty-only save button
+  // would stay grey exactly when the user needs it most.
+  const save = findButton(node, '保存阈值')
+  if (!save || save.props.disabled) throw new Error('the save button must be clickable in the adjusted state')
+  await save.props.onClick()
+  await sleep(30)
+  if (!posts.some(([p, b]) => p === 'prefs' && b?.warn === 20 && b?.critical === 5)) {
+    throw new Error('saving must post the offered defaults')
+  }
+  // Saving the offered defaults clears the flag; the note must disappear.
+  HOST.thresholdsAdjusted = false
+  node = b.render()
+  if (textOf(node).includes('已回退默认 20/5')) throw new Error('the note must clear once the config is fixed')
+  delete HOST.thresholdsAdjusted
   b.dispose()
 })
 

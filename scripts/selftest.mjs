@@ -11,9 +11,9 @@ import { join } from 'node:path'
 
 process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'sentinel-selftest-'))
 
-const { normalizeWallets, pickPrimary, levelOf, effectiveThresholds, applyBalance, deliverPending, formatAlert, createBalanceSource, startMonitor, RECOVERY_COOLDOWN_MS } = await import('../lib/balance.js')
+const { normalizeWallets, pickPrimary, levelOf, effectiveThresholds, thresholdsMisconfigured, applyBalance, deliverPending, formatAlert, createBalanceSource, startMonitor, RECOVERY_COOLDOWN_MS } = await import('../lib/balance.js')
 const { mergeStateFromDisk, acquireStateLock, saveState, loadState, webhookFingerprint } = await import('../lib/state.js')
-const { createNotifier, chunkContent, withSignature, signatureEnabled, effectiveNotify, DEFAULT_SIGNATURE, REPO_URL, INSTALL_SPEC, toFeishuCard, toPlainText } = await import('../lib/notify.js')
+const { createNotifier, chunkContent, withSignature, signatureEnabled, effectiveNotify, toFeishuCard, toPlainText } = await import('../lib/notify.js')
 const { startLocalApi } = await import('../lib/localapi.js')
 const { isQuietNow } = await import('../lib/time.js')
 
@@ -116,6 +116,33 @@ test('T5 prefs override config thresholds', () => {
   const s = fresh(); s.prefs = { warn: 30, critical: 8 }
   assert.deepEqual(effectiveThresholds(s, { balance: { warn: 20, critical: 5 } }), { warn: 30, critical: 8 })
 })
+// The panel refuses warn < critical, but the YAML cannot: warn: 5 / critical: 20
+// used to load as-is and classify balance 10 as critical. The merged pair is
+// normalised in effectiveThresholds — warn is the higher line, so an inverted
+// pair is swapped; non-positive values fall back to the defaults. An equal pair
+// cannot be repaired by swapping (balance just under the line would jump
+// straight to critical, skipping warn), so it falls back to the defaults too
+// and /status flags it for the panel.
+test('F9 an inverted YAML threshold pair cannot reach classification', () => {
+  assert.deepEqual(effectiveThresholds({ prefs: {} }, { balance: { warn: 5, critical: 20 } }), { warn: 20, critical: 5 })
+  assert.equal(levelOf(10, 20, 5), 'warn', 'balance 10 must not be critical under the swapped pair')
+  assert.deepEqual(effectiveThresholds({ prefs: { warn: 15, critical: 3 } }, { balance: { warn: 5, critical: 20 } }),
+    { warn: 15, critical: 3 }, 'validated panel prefs still win')
+  assert.deepEqual(effectiveThresholds({ prefs: { warn: 15, critical: null } }, { balance: { warn: 8, critical: 20 } }),
+    { warn: 20, critical: 15 }, 'a config value filling a null must not invert the pair either')
+  assert.deepEqual(effectiveThresholds(null, { balance: { warn: 0, critical: 5 } }), { warn: 20, critical: 5 },
+    'non-positive values fall back to the defaults')
+  // warn == critical: swapping is a no-op, so balance 9.5 would be classified
+  // critical with the warn line never reachable. Fall back to the defaults and
+  // flag it so the panel can tell the user the config needs fixing.
+  assert.deepEqual(effectiveThresholds(null, { balance: { warn: 10, critical: 10 } }), { warn: 20, critical: 5 },
+    'an equal pair falls back to the defaults')
+  assert.deepEqual(effectiveThresholds({ prefs: { warn: 10, critical: 10 } }, {}), { warn: 20, critical: 5 },
+    'an equal pair via panel prefs cannot exist, but the merge point still guards it')
+  assert.ok(thresholdsMisconfigured(null, { balance: { warn: 10, critical: 10 } }), 'the equal pair is flagged')
+  assert.ok(!thresholdsMisconfigured(null, { balance: { warn: 5, critical: 20 } }), 'an inverted pair is repaired, not flagged')
+  assert.ok(!thresholdsMisconfigured({ prefs: {} }, { balance: { warn: 20, critical: 5 } }), 'a valid pair is not flagged')
+})
 
 // ---- D: delivery engine ----
 await atest('D1 ok clears pending and stamps lastPushAt', async () => {
@@ -201,8 +228,8 @@ test('F1 titles and feishu colours', () => {
 })
 test('F1b every alert title leads with the plugin name', () => {
   const s = fresh(); s.balance = { value: 3, currency: 'CNY', ok: true }; s.alert.level = 'critical'
-  // With the install footer now opt-in, the title is the only place a forwarded
-  // card still says where it came from.
+  // With no footer line any more, the title is the only place a forwarded card
+  // still says where it came from.
   for (const [kind, cause, word] of [['critical', undefined, '告急'], ['warn', undefined, '预警'], ['recovered', 'topup', '已恢复'], ['recovered', 'threshold', '解除']]) {
     const title = formatAlert(kind, s, TH, {}, cause).title
     assert.ok(title.startsWith('余额哨兵 · '), kind + ' title must lead with the plugin name: ' + title)
@@ -218,41 +245,35 @@ test('F3 resolved notice explains threshold cause', () => {
   assert.ok(top.title.includes('已恢复'))
   assert.ok(!top.text.includes('解除原因'))
 })
-test('F2 signature is opt-in: default off, explicit on, explicit off', () => {
-  const hasFooter = (t) => t.includes('安装：') || t.includes(INSTALL_SPEC) || t.includes(REPO_URL)
+test('F2 the footer is only ever the user\'s own text: no built-in install line', () => {
+  const noFooter = (t) => !t.includes('安装：') && !t.includes('github:liancheng2020') && !t.includes('via DeepSeek')
   const s = fresh(); s.balance = { value: 3, currency: 'CNY', ok: true }; s.alert.level = 'critical'
   // 1) default (no notify config at all): the alert, the recovery notice and the
-  //    test message leave with nothing promotional, and a Feishu card grows no
-  //    note element.
-  assert.ok(!hasFooter(formatAlert('critical', s, TH, {}).text), 'default alert must not carry the install line')
-  assert.ok(!hasFooter(formatAlert('recovered', s, TH, {}, 'topup').text), 'default recovery must not carry it')
-  assert.ok(!hasFooter(withSignature('这是一条测试消息：webhook 通道工作正常。', {})), 'default test message must not carry it')
-  assert.ok(!withSignature('x', {}).includes('via'), 'default must not append any attribution')
+  //    test message leave with nothing appended, and a Feishu card grows no note.
+  assert.ok(noFooter(formatAlert('critical', s, TH, {}).text), 'default alert must not carry a footer')
+  assert.ok(noFooter(formatAlert('recovered', s, TH, {}, 'topup').text), 'default recovery must not carry one')
+  assert.equal(withSignature('x', {}), 'x', 'default must not append anything')
+  assert.equal(withSignature('x', { signature: true }), 'x', 'a leftover signature: true adds nothing on its own')
   assert.equal(toFeishuCard('t', withSignature('body', {})).elements.filter((e) => e.tag === 'note').length, 0,
     'no footer means no note element')
-  // 2) explicit on: the label stays the recognisable `github:owner/repo` spec
-  //    (with its 安装： prefix) and only that spec is the link.
-  assert.ok(DEFAULT_SIGNATURE.includes(`安装：[${INSTALL_SPEC}](${REPO_URL}#readme)`), 'signature must label the link with the install spec')
-  assert.ok(!DEFAULT_SIGNATURE.includes('[安装说明]'))
-  assert.ok(withSignature('x', { signature: true }).endsWith(DEFAULT_SIGNATURE))
-  // Feishu renders the footer from a note element: plain_text would print the
-  // markdown source, so it must be lark_md to keep the link tappable.
-  const note = toFeishuCard('t', withSignature('body', { signature: true })).elements.find((e) => e.tag === 'note')
-  assert.equal(note.elements[0].tag, 'lark_md')
-  assert.ok(note.elements[0].content.includes('#readme'))
-  // Channels without markdown must show the label only: no "](" leftovers and no
-  // duplicated URL, while bare URLs elsewhere in the body stay intact.
-  const plain = toPlainText(withSignature('body', { signature: true }))
-  assert.ok(!plain.includes(']('), 'plain channels must not show markdown source')
-  assert.ok(plain.includes(`安装：${INSTALL_SPEC}`), 'plain footer keeps the install spec')
-  assert.ok(!plain.includes(REPO_URL), 'plain channels must not append the link target')
-  assert.ok(toPlainText('充值：https://platform.deepseek.com/').includes('https://platform.deepseek.com/'),
-    'bare URLs in the body must survive flattening')
-  // 3) explicit off wins over a leftover signatureText; a custom line on its own
-  //    is already a deliberate opt-in.
-  assert.ok(!hasFooter(withSignature('x', { signature: false, signatureText: '自定义尾注' })), 'explicit off must win')
-  assert.ok(withSignature('x', { signatureText: '自定义尾注' }).endsWith('自定义尾注'))
-  assert.ok(withSignature('x', { signature: true, signatureText: '自定义尾注' }).endsWith('自定义尾注'))
+  // 2) a custom line is appended verbatim and reaches the card body as written.
+  assert.equal(withSignature('x', { signatureText: '  自定义尾注  ' }), 'x\n\n自定义尾注')
+  const card = JSON.stringify(toFeishuCard('t', withSignature('body', { signatureText: '自定义尾注' })))
+  assert.ok(card.includes('自定义尾注'), 'the card must carry the user\'s text: ' + card)
+  assert.ok(toPlainText(withSignature('body', { signatureText: '自定义尾注' })).endsWith('自定义尾注'))
+  // A link in the user's own footer must keep its target when flattened: plain
+  // channels have no markdown, and a label without a URL is a dead end.
+  assert.equal(toPlainText('尾注：[文档](https://example.com/a)'), '尾注：文档 https://example.com/a')
+  assert.equal(toPlainText('bare https://example.com/b'), 'bare https://example.com/b', 'bare URLs stay untouched')
+  // 3) an explicit off wins over the text, and the old opt-in cannot re-enable it.
+  assert.equal(withSignature('x', { signature: false, signatureText: '自定义尾注' }), 'x', 'explicit off must win')
+  assert.equal(withSignature('x', { signature: true, signatureText: '自定义尾注' }), 'x\n\n自定义尾注',
+    'the old opt-in neither adds nor removes the custom text')
+  // 4) the built-in line is gone from the source, not merely switched off: no
+  //    constant and no repo spec may survive to be appended again.
+  const src = readFileSync(new URL('../lib/notify.js', import.meta.url), 'utf8')
+  assert.ok(!src.includes('DEFAULT_SIGNATURE') && !src.includes('INSTALL_SPEC') && !src.includes('github:liancheng2020'),
+    'lib/notify.js must not ship a built-in install line')
 })
 // Regression: the host config store materialises schema defaults into the saved
 // object, so `default(false)` made "unset" indistinguishable from an explicit
@@ -269,12 +290,22 @@ await atest('F4 an unset signature keeps the custom footer after config parsing'
   assert.equal(signatureEnabled(Config({}).notify), false, 'an untouched config stays off')
   assert.equal(signatureEnabled(Config({ notify: { signature: false, signatureText: '自定义尾注' } }).notify), false,
     'an explicit false is still honoured')
-  assert.equal(signatureEnabled(Config({ notify: { signature: true } }).notify), true, 'an explicit true still works')
+  assert.equal(signatureEnabled(Config({ notify: { signature: true } }).notify), false,
+    'signature: true alone adds nothing now that the built-in line is gone')
 })
-test('F5 panel override wins over config, null defers to it', () => {
-  assert.equal(signatureEnabled(effectiveNotify({}, { notify: { signature: true } })), true)
+test('F5 a legacy panel tick cannot turn a footer on; only its "off" survives', () => {
+  // The old switch's "on" meant "append the built-in install line". That line is
+  // gone, so the tick must be inert — but a recorded "off" is still the user's
+  // explicit preference and keeps suppressing a custom text.
+  assert.equal(signatureEnabled(effectiveNotify({}, { notify: { signature: true } })), false,
+    'a stale tick must not produce a footer')
+  assert.equal(signatureEnabled(effectiveNotify({ signatureText: '自定义尾注' }, { notify: { signature: true } })), true,
+    'custom text is the only way in; the stale tick neither adds nor removes it')
   assert.equal(signatureEnabled(effectiveNotify({ signature: true }, { notify: { signature: false } })), false)
-  assert.equal(signatureEnabled(effectiveNotify({ signature: true }, { notify: { signature: null } })), true)
+  assert.equal(signatureEnabled(effectiveNotify({ signatureText: 'x' }, { notify: { signature: false } })), false,
+    'an explicit off beats the custom text')
+  assert.equal(signatureEnabled(effectiveNotify({ signature: true }, { notify: { signature: null } })), false,
+    'config signature: true no longer adds anything by itself')
   assert.equal(signatureEnabled(effectiveNotify({}, { notify: { signature: null } })), false)
   assert.equal(signatureEnabled(effectiveNotify({ signatureText: 'x' }, {})), true, 'custom text still enables')
 })
@@ -293,6 +324,63 @@ await atest('F6 bark group and generic source identify as balance-sentinel', asy
   await n.send({ channel: 'generic', url: 'https://hooks.example/x', secret: '' }, 't', 'body')
   assert.equal(bodies[0].group, 'balance-sentinel', 'bark group must name this plugin')
   assert.equal(bodies[1].source, 'balance-sentinel', 'generic source must name this plugin')
+})
+
+// Simulated push through the real adapters: Telegram and Bark render no markdown,
+// so a link the user put in their footer must arrive as "label url" — the URL
+// used to be dropped, leaving only the label in the group chat.
+await atest('F7 plain-text channels keep the target of a footer link', async () => {
+  const sent = []
+  const n = createNotifier({
+    fetchImpl: async (url, init) => {
+      sent.push({ url: String(url), body: JSON.parse(init.body) })
+      return { ok: true, status: 200, text: async () => '{"ok":true,"code":200}', headers: { get: () => 'application/json' } }
+    },
+  })
+  const text = withSignature('当前余额：¥3.00', { signatureText: '用量说明：[控制台](https://platform.deepseek.com/usage)' })
+  assert.ok(text.includes('[控制台](https://platform.deepseek.com/usage)'), 'precondition: the footer is a markdown link')
+  await n.send({ channel: 'telegram', url: '123:ABC', secret: '42' }, '余额预警', text)
+  await n.send({ channel: 'bark', url: 'https://api.day.app/k', secret: '' }, '余额预警', text)
+  assert.equal(sent.length, 2)
+  const flats = [sent[0].body.text, sent[1].body.body]
+  for (const body of flats) {
+    assert.ok(body.includes('https://platform.deepseek.com/usage'), 'the link target must survive plain text: ' + body)
+    assert.ok(body.includes('控制台'), 'the label must stay readable: ' + body)
+    assert.ok(!body.includes(']('), 'no markdown source may leak into a plain channel: ' + body)
+  }
+})
+
+// Delivery granularity is the whole message: a footer that pushes the alert over
+// a channel limit gets chunked (wecom / telegram / feishu), and a partial
+// failure re-sends the chunks that already landed. The footer is therefore
+// capped so every alert stays single-chunk.
+test('F8 an over-long footer is truncated to one chunk', () => {
+  const text = withSignature('body', { signatureText: '长'.repeat(600) })
+  assert.ok(text.endsWith('…'), 'truncation must be visible')
+  assert.equal(text.length, 4 + 2 + 201, 'footer capped at 200 chars plus the ellipsis: ' + text.length)
+  assert.equal(chunkContent(text, 3800, 'chars').length, 1, 'telegram must take it in one piece')
+  assert.equal(chunkContent(text, 3900, 'bytes').length, 1, 'wecom must take it in one piece')
+  assert.equal(withSignature('x', { signatureText: '自定义尾注' }), 'x\n\n自定义尾注', 'normal footers are untouched')
+  // Truncation counts code points, not UTF-16 units: a footer of astral
+  // characters (emoji) must never end in a lone surrogate.
+  const emojiFoot = withSignature('x', { signatureText: '😀'.repeat(120) + '字'.repeat(90) }).slice(3)
+  assert.equal(Array.from(emojiFoot).length, 201, 'capped at 200 code points plus the ellipsis')
+  assert.ok(emojiFoot.endsWith('字…'), 'an emoji must not be cut in half')
+  // A markdown link the cap would split is omitted whole: a half-drawn
+  // `[label](url` would render as literal noise in markdown channels.
+  const linkFoot = withSignature('x', { signatureText: 'a'.repeat(190) + ' [文档](https://example.com/long/path)' }).slice(3)
+  assert.ok(!linkFoot.includes('['), 'a split link is dropped entirely: ' + linkFoot)
+  assert.ok(linkFoot.endsWith('…'), 'the rest still truncates with an ellipsis')
+  const fitFoot = withSignature('x', { signatureText: 'a'.repeat(150) + ' [文档](https://example.com/p)' }).slice(3)
+  assert.ok(fitFoot.includes('[文档](https://example.com/p)'), 'a link that fits survives untouched')
+  const labelFoot = withSignature('x', { signatureText: 'a'.repeat(195) + ' [文档](https://example.com/long/path)' }).slice(3)
+  assert.ok(!labelFoot.includes('['), 'a cut inside the label drops the link too')
+  // The dropped link's start index is a code-point index; slicing the joined
+  // string would count UTF-16 units again and cut the emoji right before it.
+  const mixedFoot = withSignature('x', { signatureText: '😀'.repeat(190) + ' [文档](https://example.com/long/path)' }).slice(3)
+  assert.ok(!mixedFoot.includes('['), 'the split link after emoji is dropped')
+  assert.ok(mixedFoot.endsWith(' …'), 'the emoji right before the link stays whole')
+  assert.equal(Array.from(mixedFoot.replace(/…$/, '')).length, 191, '190 emoji + the space, counted in code points')
 })
 
 // ---- S: source chain ----
@@ -544,9 +632,10 @@ await atest('B6 test-push reaches webhook', async () => {
   hook.closeAllConnections?.()
   await new Promise((r) => hook.close(r))
 })
-// The default must leave the machine without any install link: assert on the body
-// the bridge actually posts, not only on the formatter.
-await atest('B6b test-push body omits the install line unless enabled', async () => {
+// The default must leave the machine without any install link — and with the
+// built-in line gone, the old `signature: true` opt-in cannot add one either.
+// Assert on the body the bridge actually posts, not only on the formatter.
+await atest('B6b test-push body carries no footer unless the user configured text', async () => {
   const received = []
   const hook = http.createServer((req, res) => {
     let b = ''; req.on('data', (c) => b += c)
@@ -555,6 +644,7 @@ await atest('B6b test-push body omits the install line unless enabled', async ()
   await new Promise((r) => hook.listen(0, '127.0.0.1', r))
   const s = fresh(); s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:' + hook.address().port, secret: '' }
   const bodyOf = () => received.map((x) => x.markdown?.content || '').join('\n')
+  const hasInstallLine = (t) => t.includes('安装：') || t.includes('github:liancheng2020')
 
   let stop = bridge(17444, s) // default config: notify {}
   await wait()
@@ -562,55 +652,66 @@ await atest('B6b test-push body omits the install line unless enabled', async ()
   stop()
   const off = bodyOf()
   assert.ok(off.includes('测试消息'), 'the test message itself must still be sent: ' + off)
-  assert.ok(!off.includes('安装：') && !off.includes(INSTALL_SPEC) && !off.includes(REPO_URL),
-    'default test push must not carry the install line: ' + off)
+  assert.ok(!hasInstallLine(off), 'default test push must not carry an install line: ' + off)
 
   received.length = 0
   stop = bridge(17445, s, { config: { balance: {}, notify: { signature: true } } })
   await wait()
   await (await fetch('http://127.0.0.1:17445/test-push', { method: 'POST' })).json()
   stop()
-  // Markdown channels wrap the spec in a link, so the label and the spec are
-  // separate substrings here (plain-text channels flatten them together).
-  const on = bodyOf()
-  assert.ok(on.includes('安装：[') && on.includes(INSTALL_SPEC), 'notify.signature: true must append the line: ' + on)
+  const legacyOn = bodyOf()
+  assert.ok(!hasInstallLine(legacyOn), 'a leftover signature: true must not add a footer: ' + legacyOn)
+
+  received.length = 0
+  stop = bridge(17448, s, { config: { balance: {}, notify: { signatureText: '自定义尾注' } } })
+  await wait()
+  await (await fetch('http://127.0.0.1:17448/test-push', { method: 'POST' })).json()
+  stop()
+  const custom = bodyOf()
+  assert.ok(custom.endsWith('自定义尾注'), 'the user\'s own text must be sent: ' + custom)
 
   hook.closeAllConnections?.()
   await new Promise((r) => hook.close(r))
 })
-// The panel toggle is the only path for users who never touch YAML: /notify has
-// to move /status and the bytes on the wire, not just a local flag.
-await atest('B6c the panel switch flips the footer end to end', async () => {
+// The switch is gone and its endpoint with it: nothing may flip a footer back on.
+// A legacy "off" left in state still suppresses a custom text, all the way to the
+// wire — that is the one part of the old switch that is deliberately kept.
+await atest('B6c the removed switch is unreachable; a legacy off still suppresses the footer', async () => {
   const received = []
   const hook = http.createServer((req, res) => {
     let b = ''; req.on('data', (c) => b += c)
     req.on('end', () => { received.push(JSON.parse(b)); res.setHeader('Content-Type', 'application/json'); res.end('{"errcode":0}') })
   })
   await new Promise((r) => hook.listen(0, '127.0.0.1', r))
-  const s = fresh(); s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:' + hook.address().port, secret: '' }
+  const s = fresh()
+  s.webhook = { channel: 'wecom', url: 'http://127.0.0.1:' + hook.address().port, secret: '' }
+  s.notify = { signature: true } // what an old build recorded when the box was ticked
+  const cfg = { config: { balance: {}, notify: { signatureText: '自定义尾注' } } }
   const post = (port, p, body) => fetch(`http://127.0.0.1:${port}${p}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
   }).then((r) => r.json())
   const status = (port) => fetch(`http://127.0.0.1:${port}/status`).then((r) => r.json())
+  const bodyOf = () => received.map((x) => x.markdown?.content || '').join('\n')
 
-  let stop = bridge(17446, s)
+  let stop = bridge(17446, s, cfg)
   await wait()
-  assert.equal((await status(17446)).signature, false, 'the footer must report off by default')
-  const on = await post(17446, '/notify', { signature: true })
-  assert.equal(on.signature, true, '/notify must answer with the effective state')
-  assert.equal((await status(17446)).signature, true, '/status must follow the switch')
+  assert.equal((await status(17446)).signature, true, 'the custom text is the footer, with or without the stale tick')
+  const res = await fetch('http://127.0.0.1:17446/notify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ signature: false }),
+  })
+  assert.equal(res.status, 404, 'the footer switch endpoint must be gone')
+  received.length = 0
+  await post(17446, '/test-push')
+  assert.ok(bodyOf().includes('自定义尾注'), 'the custom footer must still be sent: ' + bodyOf())
   stop()
 
-  // New instance (also resets the 3s test-push throttle): proves the override is
-  // carried by state and really reaches the wire.
-  stop = bridge(17447, s)
+  s.notify = { signature: false } // an explicit opt-out recorded by the old panel
+  stop = bridge(17447, s, cfg)
   await wait()
+  assert.equal((await status(17447)).signature, false, 'a legacy off must report off')
   received.length = 0
   await post(17447, '/test-push')
-  const body = received.map((x) => x.markdown?.content || '').join('\n')
-  assert.ok(body.includes('安装：['), 'the enabled footer must be sent: ' + body)
-  await post(17447, '/notify', { signature: false })
-  assert.equal((await status(17447)).signature, false, 'turning it back off must stick')
+  assert.ok(!bodyOf().includes('自定义尾注'), 'a legacy off must suppress the custom text: ' + bodyOf())
   stop()
 
   hook.closeAllConnections?.()

@@ -43,22 +43,20 @@ Any one of the three is enough; if the npm/Release line is not live yet, use the
 
 ## First use (two steps)
 
-1. Open the **Balance Sentinel** panel: your real balance immediately, or a clear reason (signed out / no account service / network…).
-2. Click **Set it up**, pick a channel, paste the webhook (auto-detected) → **Save and send test**. The Feishu/DingTalk form includes "How to get a bot webhook": official doc + three-step path + the security settings that channel supports. **Until a channel is saved it watches without pushing**.
+1. Open the **Balance Sentinel** panel: the official balance right away, or a clear reason (signed out / no account service / network…).
+2. Click **Set it up**, pick a channel, paste the webhook (auto-detected) → **Save and send test**. The Feishu/DingTalk form links the official bot-webhook doc and that channel's security settings.
 
-Saving only gets you to "configured, not tested"; the badge turns into "last test succeeded" once a test push actually lands, and into "last test failed" (with the reason and time) when it does not. Editing the channel or credentials clears the old result, so a stale "verified" can never pass for a working endpoint.
-
-If the balance is already below a threshold when you connect, one current-state notice is sent (once).
+Until a channel is saved it watches without pushing. Saving only means "configured" — the badge turns into "last test succeeded" once a test push really lands, and "last test failed" (with the reason) when it does not; editing the channel clears the old result. If the balance is already below a threshold when you connect, one current-state notice is sent (once).
 
 ## How it works
 
-- **Two levels**: below 20 pushes "warn", below 5 pushes "critical" (account currency, panel-editable); a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice, effective immediately on save.
-- **No spam**: same level never repeats; a real top-up pushes "recovered" (10-min anti-flap cooldown); a threshold tweak that resolves a delivered alert pushes "resolved" immediately; undelivered alerts cancel silently; quiet hours defer and merge into a single push afterwards.
-- **Failures are traceable and retryable**: pending alerts persist; business failures back off 10 min and hold after 3 (manual retry in the panel); timeouts and dead response bodies are "delivery unconfirmed" — held immediately, never auto re-sent; a failed state save writes a fallback receipt, so restarts and multiple instances still do not re-send it (unconfirmed restores as held, never as sent). If neither the state nor the receipt can be written, the duplicate risk is logged explicitly.
-- **No wedge, no duplicate across instances**: host queries have a 15s deadline and the scheduler survives any exception; desktop + web sharing `DSH_HOME` push each transition exactly once (whole-cycle lock + disk merge).
-- **Channels**: WeCom / DingTalk / Feishu (card) / Bark / ServerChan / Telegram / generic webhook; auto-chunking; HTTP-200 business failures count as failures.
-- **Follows the host skin**: the panel reads `data-ds-dark-theme`, so a light skin gets white cards, hairline borders and a soft shadow, with badges, toasts and native select menus switching with it.
-- Balance is the **official account number**; v1 ships no cost estimates.
+- **Two levels**: below 20 pushes "warn", below 5 pushes "critical" (account currency, panel-editable); a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice.
+- **No spam**: same level never repeats; recovery has a 10-min anti-flap cooldown; undelivered alerts cancel silently; quiet hours defer and merge into a single push.
+- **Failures are traceable**: pending alerts persist; business failures back off 10 min and hold after 3 (manual retry in the panel); unconfirmed delivery is held immediately and never auto re-sent; only when even the receipt cannot be written is the duplicate risk logged.
+- **No wedge, no duplicates**: host queries have a 15s deadline and the scheduler survives any exception; instances sharing `DSH_HOME` push each transition once (whole-cycle lock + disk merge).
+- **Channels & look**: WeCom / DingTalk / Feishu (card) / Bark / ServerChan / Telegram / generic webhook; auto-chunking; HTTP-200 business failures count as failures; the panel follows the host light/dark skin.
+
+Balance is the **official account number**; v1 ships no cost estimates.
 
 ## Config (optional, profile cordis.patch.yml)
 
@@ -70,18 +68,18 @@ If the balance is already below a threshold when you connect, one current-state 
       enabled: true
       pollSeconds: 60              # min 60
       warn: 20
-      critical: 5
+      critical: 5                  # must be below warn; an inverted pair is swapped, an equal pair falls back to 20/5
       timezone: Asia/Shanghai
       quiet: { start: "", end: "" }  # e.g. "23:00"–"08:00"
       apiKey: ""                   # fallback for older hosts only
     notify:
-      signature: false             # off by default (same switch in the panel, no config edit needed); true appends the "via …" install line
-      signatureText: ""            # custom text; setting only this also turns the footer on
+      signatureText: ""            # optional custom footer; only appended when non-empty; truncated past 200 chars
+      # signature: false           # optional explicit opt-out: never append, even with the text above
     localApi:
       enabled: true                # panel bridge on 127.0.0.1:17430
 ```
 
-Thresholds and channel are also editable in the panel; saving applies without a restart.
+Thresholds and channel are also editable in the panel, so you never have to touch this file. The footer only ever comes from your own `signatureText` (no built-in install link, no panel switch); `signature: false` still turns it off explicitly.
 
 ## Privacy & compliance
 

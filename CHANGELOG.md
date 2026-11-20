@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **移除推送尾注的内置安装链接与面板开关**：`DEFAULT_SIGNATURE` / `INSTALL_SPEC` / `REPO_URL` 常量与 `POST /notify` 路由一并删除，摘要卡片和配置表单里都不再有「附上安装链接」勾选框。只保留用户自己写的 `notify.signatureText`（填了就作为推送最后一段附上）与显式关闭偏好：配置里的 `signature: false`，或旧版本面板写进状态文件的 `state.notify.signature: false`，仍会压掉自定义尾注。
+- **旧勾选记录不再产生推广内容**：早期面板勾选写入的 `signature: true` 现在完全惰性——内置安装行已不存在，它既不会追加任何内容，也不会重新打开尾注；配置里的 `signature: true` 同样仅保留兼容（旧 profile 仍可加载），单独存在时不产生尾注。
+- **推送卡片按参考稿重排**：地址行带上「当前地址：」标签（如 `当前地址：open.feishu.cn`），不再是裸主机名；「低余额/恢复通知将推送到这里，保存即生效，无需重启。」从配置表单移回摘要卡片、作为副标题一句话（编辑表单里不再重复）。测试时间不回到卡片上——何时测试、是否通过由标题行的状态徽章表达。
+
+### Fixed
+
+- **纯文本通道不再丢尾注里的链接目标**：`toPlainText()` 把 `[文字](URL)` 压成 `文字 URL`（此前只留文字）。Telegram、Bark 与飞书纯文本回落不渲染 markdown，用户自定义尾注里的链接因此变成点不动的死标签。告警正文本身不含 markdown 链接，裸 URL 仍然原样保留。
+- **超长自定义尾注不再导致告警重复发送**：`signatureText` 超过 200 字会被截断（加 `…`）。分块发送以整条消息为单位重试，尾注过长会把告警撑成多块，某块失败重试时已送达的块会被原样重发；截断后告警恒为单块（正文几百字，余量充足），重试不再复制已到账的内容。
+- **YAML 反写阈值不再绕过校验**：面板拒绝 `warn ≤ critical`，但 YAML 无法拒绝（整体拒载会让插件失效）。现在合并面板与 YAML 配置后统一归一化（`effectiveThresholds`）：反写的阈值对自动对调（`warn` 本义是更高的一条线），非正数回落默认值（20/5）。分类、恢复判定、`/status` 与面板展示读的都是同一处合并结果，不再出现「写反后以告急线当预警线」的错乱。
+- **相等的阈值对不再直接告急**：`warn: 10`、`critical: 10` 时对调仍是原值，余额一旦低于 10 就跳过预警直接告急。相等对无法通过对调修复（也没有自洽读法），现在与非法值一样回退默认 20/5；`/status` 额外带 `thresholdsAdjusted` 标记，面板在阈值卡片上提示「配置里的预警与告急阈值相等……请修正配置」，输入框直接给出生效的默认值，点保存即可修正。提示状态下「保存阈值」不再灰置——给出的默认值与显示值相等，按「仅改动才可保存」的规则按钮会一直禁用，恰恰在最需要保存的时候点不了；现在异常状态本身视为可保存，保存 20/5 后提示随之消失。
+- **尾注截断不再切坏链接和 emoji**：截断从 UTF-16 码元改为按码点计数（`Array.from`），emoji 这类增补平面字符不会再被切成孤代理；同时截断点若落在 Markdown 链接内部（标签、URL、乃至 `]`/`(` 之间被切开），整条链接省略而不是留半截 `[文字](url` 渲染成乱码。链接定位与截断始终在同一个码点数组上进行——丢弃链接时按码点下标切数组再拼接，而不是对拼好的字符串按 UTF-16 单元再切一次，否则 emoji 紧挨被丢弃的链接时仍会被切坏。裸 `[标签]` 是普通文本不受影响；容量以内的链接原样保留。
+
+### Tests
+
+- `node scripts/selftest.mjs`：82 passed / 0 failed。F2 增加 `toPlainText` 的链接与裸 URL 断言；F7 用模拟推送走 Telegram 与 Bark 适配器，断言尾注里的标签与 URL 都到达、且不残留 `](`。F8 断言超长尾注被截断且不触发分块（含去修复即失败的探针验证），并覆盖码点截断（emoji 不切成孤代理）与链接截断（容量内的链接原样保留，容量外的整条省略），另加「emoji 紧挨被丢弃链接」的回归断言；F9 断言 YAML 反写 `{warn:5, critical:20}` 归一化为 `{warn:20, critical:5}`、相等对 `{warn:10, critical:10}` 回退默认 20/5 且 `thresholdsMisconfigured` 置位、面板偏好仍优先、偏好的 `null` 回落到 YAML 值、非正数回落默认值。其余 F2/F4/F5/B6b/B6c 围绕「没有内置尾注」：未被用户填写文本的告警、恢复通知、测试推送都不带安装链接或 `github:` 字样；`signature: true` 单独存在时不产生尾注，旧 state 里的 `true` 也不会；`signature: false`（配置或旧 state）仍压掉自定义文案；`POST /notify` 返回 404；源码层面断言 `lib/notify.js` 不再包含 `DEFAULT_SIGNATURE` / `INSTALL_SPEC`。
+- `node scripts/selftest-client.mjs`：40 passed / 0 failed。P35/P37 改为断言摘要卡片与编辑表单都没有 `sentinel-sig` 开关、也没有「附上安装链接」文案；假桥接删除了 `/notify` 路由，客户端若再调用会直接让用例失败；P36 断言元信息行只有带标签的地址（`当前地址：open.feishu.cn`），摘要卡片副标题含保存说明句、表单里不再出现；P40 断言 `thresholdsAdjusted` 时阈值卡片显示配置有误提示、输入框给出默认 20/5、「保存阈值」可点且提交 20/5、标记清除后提示消失。
+- `node scripts/verify-dedup.mjs`：推送计数 1（应为 1）。`node scripts/verify-market.mjs`：3 passed。`npm pack` 解包检查 7/7，含「包内不含内置安装行、不含已移除的开关文案、打包副本的纯文本扁平化保留链接目标」。
+
 ## [0.1.5] - 2026-11-20
 
 ### Changed

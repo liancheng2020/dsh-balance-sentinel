@@ -70,6 +70,7 @@ window.__ModuleLoader__.load({
         'quiet.on': '免打扰 {s}–{e}，期间告警顺延、出窗合并推送。',
         'th.title': '告警阈值', 'th.warn': '预警阈值', 'th.critical': '告急阈值', 'th.save': '保存阈值',
         'th.saved': '阈值已保存，立即生效。', 'th.bad': '需为正数，且预警阈值大于告急阈值。',
+        'th.adjusted': '配置里的预警与告急阈值相等，无法区分预警和告急，已回退默认 20/5，请修正配置。',
         'th.hint': '低于预警值推「预警」，低于告急值推「告急」；充值或调阈值回到预警值之上推一条「恢复/解除」。告警未送达时静默取消，不补发。',
         'sec.push': '推送配置', 'push.channel': '推送通道：{c}', 'push.on': '已配置', 'push.off': '未配置',
         'push.untested': '已配置，待测试', 'push.verified': '最近测试成功', 'push.failed': '最近测试失败',
@@ -79,14 +80,13 @@ window.__ModuleLoader__.load({
         'push.notPersisted': '结果未写入状态文件，重启后会丢失。',
         'chan.none': '未配置', 'chan.wecom': '企业微信', 'chan.dingtalk': '钉钉', 'chan.feishu': '飞书',
         'chan.bark': 'Bark', 'chan.serverchan': 'Server酱', 'chan.telegram': 'Telegram', 'chan.generic': '通用 Webhook',
-        'push.hint': '低余额/恢复通知将推送到这里，保存即生效，无需重启。',
+
         'push.empty': '还没有配置推送通道。填好地址保存，余额不足时自动提醒到 IM。',
         'push.field.channel': '推送通道', 'push.field.url': 'Webhook 地址', 'push.field.token': 'Bot Token',
         'push.field.secret': '加签密钥（可选）', 'push.field.chat': 'chat_id',
         'push.saveTest': '保存并发送测试', 'push.save': '仅保存', 'push.saving': '保存中…',
-        'push.edit': '修改', 'push.setup': '配置推送', 'push.cancel': '取消', 'push.saved': '已保存，立即生效。',
-        'push.signature': '附上安装链接', 'push.signatureHint': '（默认关闭，开启后告警尾部会多一行署名）',
-        'push.signatureTitle': '默认关闭；开启后告警尾部会多一行署名与安装链接',
+        'push.edit': '修改', 'push.setup': '配置推送', 'push.cancel': '取消',         'push.saved': '已保存，立即生效。',
+        'push.address': '当前地址：{h}', 'push.hint': '低余额/恢复通知将推送到这里，保存即生效，无需重启。',
         'push.disable': '关闭推送', 'push.disableConfirm': '确认关闭？', 'push.disabled': '已关闭推送，可随时重新配置。',
         'push.test': '发送测试推送', 'push.testing': '发送中…',
         'push.testOk': '测试推送成功：{c} 通道正常，发出 {n} 条。',
@@ -121,6 +121,7 @@ window.__ModuleLoader__.load({
         'quiet.on': 'Quiet hours {s}–{e}: alerts defer and merge into one push afterwards.',
         'th.title': 'Alert thresholds', 'th.warn': 'Warn below', 'th.critical': 'Critical below', 'th.save': 'Save thresholds',
         'th.saved': 'Thresholds saved; effective immediately.', 'th.bad': 'Positive numbers required, warn above critical.',
+        'th.adjusted': 'The config sets warn equal to critical, which cannot distinguish warn from critical; the defaults 20/5 are in effect — fix the config.',
         'th.hint': 'Below warn pushes "low", below critical pushes "critical"; a top-up or a threshold tweak back above warn pushes one "recovered"/"resolved" notice. Undelivered alerts cancel silently.',
         'sec.push': 'Push settings', 'push.channel': 'Push channel: {c}', 'push.on': 'Configured', 'push.off': 'Not set',
         'push.untested': 'Configured, not tested', 'push.verified': 'Last test succeeded', 'push.failed': 'Last test failed',
@@ -130,15 +131,14 @@ window.__ModuleLoader__.load({
         'push.notPersisted': 'Result not written to the state file; it will be lost on restart.',
         'chan.none': 'Not set', 'chan.wecom': 'WeCom', 'chan.dingtalk': 'DingTalk', 'chan.feishu': 'Feishu',
         'chan.bark': 'Bark', 'chan.serverchan': 'ServerChan', 'chan.telegram': 'Telegram', 'chan.generic': 'Generic webhook',
-        'push.hint': 'Low-balance / recovery notices push here. Saving applies immediately, no restart.',
+
         'push.empty': 'No push channel yet. Save a URL and get IM alerts when the balance runs low.',
 
         'push.field.channel': 'Channel', 'push.field.url': 'Webhook URL', 'push.field.token': 'Bot Token',
         'push.field.secret': 'Sign secret (optional)', 'push.field.chat': 'chat_id',
         'push.saveTest': 'Save and send test', 'push.save': 'Save only', 'push.saving': 'Saving…',
-        'push.edit': 'Edit', 'push.setup': 'Set up push', 'push.cancel': 'Cancel', 'push.saved': 'Saved; effective immediately.',
-        'push.signature': 'Append the install link', 'push.signatureHint': '(off by default, adds a signature line on alerts)',
-        'push.signatureTitle': 'Off by default; when on, alerts end with a signature line and install link',
+        'push.edit': 'Edit', 'push.setup': 'Set up push', 'push.cancel': 'Cancel',         'push.saved': 'Saved; effective immediately.',
+        'push.address': 'Address: {h}', 'push.hint': 'Low-balance / recovery notices push here. Saving applies immediately, no restart.',
         'push.disable': 'Turn off', 'push.disableConfirm': 'Confirm?', 'push.disabled': 'Push turned off; configure it again anytime.',
         'push.test': 'Send test push', 'push.testing': 'Sending…',
         'push.testOk': 'Test push via {c} succeeded, {n} message(s) sent.',
@@ -624,7 +624,10 @@ window.__ModuleLoader__.load({
       const critShown = critDraft === null ? String(th.critical) : critDraft
       const warnN = Number(warnShown), critN = Number(critShown)
       const thValid = Number.isFinite(warnN) && Number.isFinite(critN) && warnN > 0 && critN > 0 && warnN > critN
-      const thDirty = warnN !== th.warn || critN !== th.critical
+      // An adjusted (equal-pair) config must be saveable as-is: the offered
+      // defaults equal the shown values, so without this the save button would
+      // stay grey exactly when the user needs it most.
+      const thDirty = !!host?.thresholdsAdjusted || warnN !== th.warn || critN !== th.critical
 
       const hero = () => {
         if (!host) return null
@@ -658,40 +661,6 @@ window.__ModuleLoader__.load({
           h('div', { style: { ...css.metaDim, marginTop: 6, whiteSpace: 'pre-line' } }, t('help.' + ch + '.steps')))
       }
 
-      // Footer opt-in lives in the panel: send the whole switch, never a delta, so
-      // the checkbox and the state file cannot disagree after a failed write.
-      const toggleSignature = async (on) => {
-        setBusy('sig'); showResult(null)
-        try {
-          const j = await post('/notify', { signature: !!on })
-          if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
-          // Same rule as a webhook save: a /status issued before this write still
-          // reports the old switch, and letting it land would flip the checkbox
-          // back under the user.
-          configSeq.current += 1
-          setHost((prev) => ({ ...(prev || {}), signature: !!j.signature }))
-        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
-        finally { setBusy('') }
-      }
-
-      const signatureToggle = (extra) => h('label', {
-        htmlFor: 'sentinel-sig',
-        // The full sentence lives in the tooltip: on the card it was the longest
-        // line for the least important control.
-        title: t('push.signatureTitle'),
-        style: { display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, cursor: busy ? 'default' : 'pointer', fontSize: 12, ...extra },
-      },
-      h('input', {
-        type: 'checkbox', id: 'sentinel-sig', checked: !!host?.signature, disabled: !!busy,
-        style: { margin: '2px 0 0', accentColor: T.brand },
-        onChange: (e) => toggleSignature(e.target.checked),
-      }),
-      h('span', { style: { color: T.sub, lineHeight: 1.5 } },
-        h('span', { style: { color: T.text } }, t('push.signature')),
-        // Chinese full-width brackets sit flush against the label; the Latin
-        // parenthesis needs a small gap to stay legible.
-        h('span', { style: { ...css.metaDim, marginLeft: LANG === 'en' ? 4 : 0 } }, t('push.signatureHint'))))
-
       const pushForm = () => h('div', { style: css.card },
         h('div', { style: css.field },
           h('label', { style: css.fieldLabel, htmlFor: 'sentinel-chan' }, t('push.field.channel')),
@@ -716,9 +685,8 @@ window.__ModuleLoader__.load({
             onChange: (e) => setForm({ ...form, secret: e.target.value }),
           })) : null,
         webhookHelp(),
-        signatureToggle(),
-        // Breathing room between the switch and the actions: without it the two
-        // rows read as one block and the buttons crowd the checkbox label.
+        // Breathing room between the help box and the actions: without it the two
+        // read as one block and the buttons crowd the explanation.
         h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
           // Also offered before the first save: the form no longer opens by
           // itself, so whoever opened it (by mistake or just to look) needs a way
@@ -740,10 +708,7 @@ window.__ModuleLoader__.load({
             type: 'button', disabled: !!busy,
             style: busy ? { ...css.btnPrimary, opacity: 0.6, cursor: 'not-allowed' } : css.btnPrimary,
             onClick: () => saveWebhook(true),
-          }, busy === 'test' ? t('push.testing') : busy === 'save' ? t('push.saving') : t('push.saveTest'))),
-        // Where this sentence is actually useful: it explains what saving does,
-        // so it belongs next to the save buttons, not in the summary card.
-        h('div', { style: { ...css.metaDim, marginTop: 8 } }, t('push.hint')))
+          }, busy === 'test' ? t('push.testing') : busy === 'save' ? t('push.saving') : t('push.saveTest'))))
 
       // "Configured" is not "connected": a stored webhook proves nothing until a
       // test push comes back. Four states, and only a tested-good one is green —
@@ -757,14 +722,10 @@ window.__ModuleLoader__.load({
         : connState === 'failed' ? T.error
           : connState === 'untested' ? T.brand
             : T.sub // off: a secondary grey, not the dimmed token (too faint on white)
-      // Address and test time share one line: the pill on the title row already
-      // says whether that test passed, so spelling out "最近测试成功" here only
-      // added words. The failure reason stays on its own line — it is the one
-      // thing worth reading twice.
-      const testTime = verifyInfo && verifyInfo.at ? fmtTime(verifyInfo.at) : ''
+      // The address is labelled so the line reads on its own ("当前地址：…"); when
+      // the test ran and whether it passed live in the badge on the title row.
       const persistedNote = verifyInfo && verifyInfo.persisted === false ? t('push.notPersisted') : ''
-      const metaLine = [host?.urlHost, (connState === 'verified' || connState === 'failed') ? testTime : '', persistedNote]
-        .filter(Boolean).join(' · ')
+      const metaLine = [host?.urlHost ? t('push.address', { h: host.urlHost }) : '', persistedNote].filter(Boolean).join(' · ')
       const detailLine = connState === 'failed' ? t('push.failedWhy', { e: verifyInfo.error || '' })
         : connState === 'untested' ? t('push.untestedHint')
           : ''
@@ -783,14 +744,15 @@ window.__ModuleLoader__.load({
             t('push.channel', { c: t('chan.' + host.channel) })),
           h('span', { style: css.badgeSoft(connColor) }, t('push.' + connState))),
         metaLine ? h('div', { style: css.metaDim }, metaLine) : null,
+        // One static sentence saying what the card is for — it reads as the
+        // card's subtitle (per the reference mock), the form does not repeat it.
+        h('div', { style: css.metaDim }, t('push.hint')),
         // Failure text uses the same mixed ink as css.error: some skins tint the
         // raw error token pink, which is unreadable at 11.5px on a light card.
         detailLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? ink(T.error) : undefined } }, detailLine) : null,
         host.configured ? null : h('div', { style: css.metaDim }, t('push.empty')),
-        // The switch keeps its own line and the explanation stays with it: this is
-        // the only place a user learns what the toggle does. Actions sit below it,
-        // left-aligned like the rest of the panel.
-        signatureToggle(),
+        // No footer switch: an optional signature is configured in the profile
+        // file (notify.signatureText) and never advertised on the card itself.
         h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
           h('button', {
             type: 'button', disabled: !!busy || !host.configured, className: 'sentinel-btn',
@@ -843,6 +805,7 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
             h('button', { type: 'button', disabled: !!busy || !thValid || !thDirty, style: thValid && thDirty ? css.btnPrimary : { ...css.btnPrimary, opacity: 0.5, cursor: 'not-allowed' }, onClick: savePrefs }, t('th.save')),
             !thValid ? h('span', { style: { fontSize: 11.5 }, className: 'sentinel-th-bad' }, t('th.bad')) : null),
+          host.thresholdsAdjusted ? h('div', { style: { color: T.error, fontSize: 12, marginTop: 8 } }, t('th.adjusted')) : null,
           h('div', { style: { ...css.metaDim, marginTop: 8 } }, t('th.hint'))) : null,
         result && result.scope === 'th' ? resultBlock(result, { marginBottom: 12 }) : null,
 
