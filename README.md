@@ -44,7 +44,7 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
 ## 首次使用（两步接通）
 
 1. 打开 **余额哨兵** 面板：立刻看到真实余额，或明确原因（未登录 / 无账号服务 / 网络…）。
-2. 「推送配置」选通道 → 粘 webhook（自动识别）→ **保存并发送测试**。飞书／钉钉框内有「如何获取机器人 Webhook」：官方链接 + 三步路径 + 该通道适用的安全设置。**没配通道前只监控不推送**。
+2. 点「现在配置」→「推送配置」选通道 → 粘 webhook（自动识别）→ **保存并发送测试**。飞书／钉钉框内有「如何获取机器人 Webhook」：官方链接 + 三步路径 + 该通道适用的安全设置。**没配通道前只监控不推送**。
 
 保存成功只说明通道「已配置，待测试」，测试推送真的送达才会变成「最近测试成功」；失败则显示「最近测试失败」并附原因与时间。改通道或凭据后旧结果立即清除，不会有残留的「已验证」冒充接通。
 
@@ -75,8 +75,8 @@ dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentin
       quiet: { start: "", end: "" }  # 免打扰，如 "23:00"–"08:00"
       apiKey: ""                   # 仅老宿主回落用；优先宿主账号/环境变量
     notify:
-      signature: true              # 推送尾部署名（安装标识可点击），可关
-      signatureText: ""
+      signature: false             # 默认关闭（面板同一开关，不用改配置）；改 true 才在推送尾部附署名与安装链接
+      signatureText: ""            # 自定义署名文案；只填这里也视为开启
     localApi:
       enabled: true                # 面板桥接 127.0.0.1:17430，可关
 ```

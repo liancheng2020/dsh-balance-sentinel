@@ -94,6 +94,14 @@ function* walk(node) {
 const textOf = (node) => [...walk(node)].filter((n) => n.text != null).map((n) => n.text).join('')
 const findButton = (node, label) => [...walk(node)].find((n) => n.type === 'button' && textOf(n).includes(label)) || null
 const findById = (node, id) => [...walk(node)].find((n) => n.props && n.props.id === id) || null
+// The setup form never opens by itself, so a test opens it the way a user does:
+// through the CTA in the unconfigured state.
+const openSetup = async (render) => {
+  const btn = findButton(render(), '现在配置')
+  if (!btn) throw new Error('no "现在配置" entry point')
+  await btn.props.onClick()
+  render()
+}
 
 const els = {}
 const docListeners = {}
@@ -122,7 +130,8 @@ const HOST = {
   pending: null,
   thresholds: { warn: 20, critical: 5 },
   quiet: { start: '', end: '' },
-  enabled: true, signature: true,
+  // Mirrors the bridge default: the install footer is off unless enabled.
+  enabled: true, signature: false,
 }
 let statusFails = 0
 let statusCalls = 0
@@ -192,6 +201,12 @@ const fetchMock = async (url, init) => {
       return { ok: true, status: 200, json: async () => ({ ok: false, error: 'errcode 93000 invalid webhook', code: 93000, hint: 'Webhook 地址无效', verify: verdict(false) }) }
     }
     return { ok: true, status: 200, json: async () => ({ ok: true, chunks: 1, channel: 'wecom', verify: verdict(true) }) }
+  }
+  if (u.startsWith('http://127.0.0.1:17430/notify')) {
+    const body = JSON.parse(init?.body || '{}')
+    posts.push(['notify', body])
+    HOST.signature = !!body.signature
+    return { ok: true, status: 200, json: async () => ({ ok: true, signature: HOST.signature }) }
   }
   if (u.startsWith('http://127.0.0.1:17430/prefs')) {
     const body = JSON.parse(init?.body || '{}')
@@ -286,6 +301,9 @@ await atest('P3 unconfigured: monitoring-on banner + CTA', async () => {
   const node = render()
   const txt = textOf(node)
   if (!txt.includes('监控中，通知未接通') || !findButton(node, '现在配置')) throw new Error(txt.slice(0, 300))
+  // The push card keeps the wording of dsh-aihot-radar (push.setup), so the two
+  // panels read alike; the banner keeps its own "现在配置" CTA.
+  if (!findButton(node, '配置推送')) throw new Error('the push card entry must read "配置推送"')
   dispose()
 })
 await atest('P4 held alert: reason + manual retry hits /alert/retry', async () => {
@@ -332,6 +350,7 @@ await atest('P6 shortest path: paste url -> save&test -> success', async () => {
   const { render, dispose } = boot()
   render()
   await sleep(30)
+  await openSetup(render)
   let node = render()
   findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
   node = render()
@@ -390,6 +409,7 @@ await atest('P11 feishu/dingtalk form: official webhook help, save&test kept', a
   const { render, dispose } = boot()
   render()
   await sleep(30)
+  await openSetup(render)
   let node = render()
   findById(node, 'sentinel-chan').props.onChange({ target: { value: 'feishu' } })
   node = render()
@@ -443,6 +463,7 @@ await atest('P13 save failure clears busy; edit then retry succeeds', async () =
   const { render, dispose } = boot()
   render()
   await sleep(30)
+  await openSetup(render)
   let node = render()
   findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
   node = render()
@@ -506,6 +527,7 @@ await atest('P16 save&test failure still re-enables the button', async () => {
   const { render, dispose } = boot()
   render()
   await sleep(30)
+  await openSetup(render)
   let node = render()
   findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
   node = render()
@@ -609,6 +631,7 @@ await atest('P22 host skin drives colorScheme and the light palette', async () =
   resetHost(); HOST.configured = false; HOST.channel = 'none'
   bodyAttrs.add('data-ds-dark-theme')
   let b = boot(); b.render(); await sleep(30)
+  await openSetup(() => b.render())
   let sel = findById(b.render(), 'sentinel-chan')
   if (sel.props.style.colorScheme !== 'dark') throw new Error('dark skin must open a dark menu: ' + sel.props.style.colorScheme)
   const sheet = els['sentinel-style'] ? els['sentinel-style'].textContent : ''
@@ -618,12 +641,42 @@ await atest('P22 host skin drives colorScheme and the light palette', async () =
 
   bodyAttrs.delete('data-ds-dark-theme')
   b = boot(); b.render(); await sleep(30)
+  await openSetup(() => b.render())
   sel = findById(b.render(), 'sentinel-chan')
   if (sel.props.style.colorScheme !== 'light') throw new Error('light skin must open a light menu: ' + sel.props.style.colorScheme)
   b.dispose()
   bodyAttrs.add('data-ds-dark-theme')
 })
 
+// A label added to the inline dictionary but never exported leaves the locale
+// packs (shipped for translators and for other surfaces) silently incomplete —
+// that is exactly how push.setup went missing.
+await atest('P23b exported locale packs match the inline dictionary', async () => {
+  const unesc = (v) => v.replace(/\\n/g, '\n').replace(/\\'/g, "'")
+  const inline = (lang) => {
+    const i = clientCode.indexOf(`      ${lang}: {`)
+    const j = lang === 'zh' ? clientCode.indexOf('      en: {', i) : clientCode.indexOf('\n    }', i)
+    const out = {}
+    for (const m of clientCode.slice(i, j).matchAll(/'([\w.]+)':\s*'((?:\\'|[^'])*)'/g)) out[m[1]] = unesc(m[2])
+    return out
+  }
+  const flatten = (o) => {
+    const out = {}
+    for (const [k, v] of Object.entries(o)) {
+      if (v && typeof v === 'object') for (const [k2, v2] of Object.entries(v)) out[`${k}.${k2}`] = v2
+      else out[k] = v
+    }
+    return out
+  }
+  for (const lang of ['zh', 'en']) {
+    const pack = flatten(JSON.parse(readFileSync(join(here, '..', 'locale', `${lang}.json`), 'utf8')))
+    const mine = inline(lang)
+    const missing = Object.keys(mine).filter((k) => !(k in pack))
+    if (missing.length) throw new Error(`${lang} pack is missing: ${missing.join(', ')}`)
+    const drift = Object.keys(mine).filter((k) => k in pack && mine[k] !== pack[k])
+    if (drift.length) throw new Error(`${lang} pack drifted on: ${drift.join(', ')}`)
+  }
+})
 await atest('P23 zh/en catalogs have identical keys', async () => {
   const iZh = clientCode.indexOf('      zh: {')
   const iEn = clientCode.indexOf('      en: {')
@@ -661,6 +714,7 @@ await atest('P25 error notice is not auto-dismissed', async () => {
   const { render, dispose } = boot()
   render()
   await sleep(30)
+  await openSetup(render)
   let node = render()
   findById(node, 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
   node = render()
@@ -807,16 +861,17 @@ await atest('P31 a late /status cannot undo a saved webhook', async () => {
   b.dispose()
 })
 
-// Regression: the first-use auto-open ran on any early /status, including one
-// that had been superseded by a save. The summary said "configured" while the
-// setup form popped back open under it.
+// Regression: a /status that had been superseded by a save still ran the
+// unconfigured branch, which used to reopen the setup form under a summary that
+// already said "configured".
 await atest('P32 a stale /status cannot reopen the form after saving', async () => {
   resetHost()
   Object.assign(HOST, { configured: false, channel: 'none', urlHost: '', secretSet: false, verify: null })
   const b = boot()
   b.render()
   await sleep(30)
-  if (!findById(b.render(), 'sentinel-url')) throw new Error('precondition: first use must open the setup form')
+  await openSetup(() => b.render())
+  if (!findById(b.render(), 'sentinel-url')) throw new Error('precondition: the CTA must open the setup form')
 
   statusHold = 1
   await findButton(b.render(), '刷新').props.onClick()
@@ -840,6 +895,177 @@ await atest('P32 a stale /status cannot reopen the form after saving', async () 
   if (findById(node, 'sentinel-url')) throw new Error('an obsolete /status reopened the setup form')
   const txt = textOf(node)
   if (!txt.includes('已配置，待测试')) throw new Error('the summary must still read untested: ' + txt.slice(0, 240))
+  b.dispose()
+})
+
+// First use reads as a monitor, not as a form to fill in: the unconfigured state
+// is announced by the banner, and nothing (not even a refresh) opens the form.
+await atest('P33 the panel never opens the setup form by itself', async () => {
+  resetHost()
+  Object.assign(HOST, { configured: false, channel: 'none', urlHost: '', secretSet: false, verify: null })
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let node = b.render()
+  if (findById(node, 'sentinel-url')) throw new Error('the setup form must not open on first load')
+  if (!textOf(node).includes('监控中，通知未接通')) throw new Error('the banner must announce the unconfigured state')
+
+  await findButton(node, '刷新').props.onClick()
+  b.render() // the refresh restarts the poll effect
+  await sleep(30)
+  node = b.render()
+  if (findById(node, 'sentinel-url')) throw new Error('a refresh must not open the setup form')
+
+  await openSetup(() => b.render())
+  node = b.render()
+  if (!findById(node, 'sentinel-url')) throw new Error('the CTA must still open the form')
+  if (textOf(node).includes('还没有配置推送通道')) throw new Error('the form must not repeat the banner explanation')
+  b.dispose()
+})
+
+// With no auto-open, the first-use form is reachable only by an explicit click,
+// so it also needs an explicit way out that never touches the saved webhook.
+await atest('P34 an unconfigured form can be cancelled without saving', async () => {
+  resetHost()
+  Object.assign(HOST, { configured: false, channel: 'none', urlHost: '', secretSet: false, verify: null })
+  const b = boot()
+  b.render()
+  await sleep(30)
+  await openSetup(() => b.render())
+  if (!findById(b.render(), 'sentinel-url')) throw new Error('precondition: the CTA must open the form')
+  const before = posts.length
+  findById(b.render(), 'sentinel-url').props.onChange({ target: { value: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=k' } })
+  await findButton(b.render(), '取消').props.onClick()
+  let node = b.render()
+  if (findById(node, 'sentinel-url')) throw new Error('cancel must close the form')
+  if (posts.length !== before) throw new Error('cancel must not save anything: ' + JSON.stringify(posts.slice(before)))
+  if (!textOf(node).includes('监控中，通知未接通')) throw new Error('the banner must still explain the unconfigured state')
+  await openSetup(() => b.render())
+  if (!findById(b.render(), 'sentinel-url')) throw new Error('the form must be reachable again after cancelling')
+  b.dispose()
+})
+
+// The footer switch is the only way a user who never edits YAML can opt in, so it
+// has to start off and round-trip through the bridge.
+await atest('P35 the push card can switch the install footer', async () => {
+  resetHost()
+  HOST.signature = false
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let box = findById(b.render(), 'sentinel-sig')
+  if (!box) throw new Error('the push card must offer the footer switch')
+  if (box.props.checked) throw new Error('the footer must start off')
+  const label = textOf(b.render())
+  if (!label.includes('（默认关闭')) throw new Error('the hint must read as a bracketed note: ' + label.slice(0, 200))
+  if (label.includes(' 默认关闭')) throw new Error('a full-width bracket must not be preceded by a space')
+  await box.props.onChange({ target: { checked: true } })
+  await sleep(20)
+  box = findById(b.render(), 'sentinel-sig')
+  if (!box.props.checked) throw new Error('the switch must stay on once the bridge accepts it')
+  const sent = posts.filter(([p]) => p === 'notify').pop()
+  if (!sent || sent[1].signature !== true) throw new Error('the switch must be saved as true: ' + JSON.stringify(sent))
+  await box.props.onChange({ target: { checked: false } })
+  await sleep(20)
+  if (findById(b.render(), 'sentinel-sig').props.checked) throw new Error('the switch must turn off again')
+  b.dispose()
+})
+
+// One line per fact: endpoint and test time share a line, the failure reason keeps
+// its own, and the "no restart needed" sentence moves to where saving happens.
+await atest('P36 the push card keeps one line per fact', async () => {
+  resetHost()
+  HOST.verify = { at: Date.now(), ok: true, channel: 'wecom', error: null, persisted: true }
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let node = b.render()
+  let txt = textOf(node)
+  if (!txt.includes('qyapi.weixin.qq.com')) throw new Error('the endpoint must stay visible')
+  if (!/\d{2}:\d{2}:\d{2}/.test(txt)) throw new Error('the test time must stay visible: ' + txt.slice(0, 200))
+  if (txt.includes('当前地址') || txt.includes('最近测试成功：')) {
+    throw new Error('address and time must share one line: ' + txt.slice(0, 200))
+  }
+  if (txt.includes('保存即生效')) throw new Error('the save explanation belongs in the form, not the card')
+  if (!txt.includes('开启后告警尾部会多一行署名')) throw new Error('the card must keep the footer explanation')
+  // Actions stay left-aligned under the switch, never pushed to the right edge.
+  const actionRow = [...walk(node)].find((n) => n.props?.style?.display === 'flex'
+    && [...walk(n)].some((c) => c.props?.type === 'button' && textOf(c).includes('发送测试推送')))
+  if (!actionRow) throw new Error('the push actions must sit in their own row')
+  if (actionRow.props.style.marginLeft === 'auto' || actionRow.props.style.justifyContent === 'flex-end') {
+    throw new Error('actions must stay left-aligned')
+  }
+  const flexRow = (n, gap) => [...walk(n)].some((x) => x.props?.style?.display === 'flex'
+    && x.props.style.flexWrap === 'wrap' && x.props.style.marginTop === gap)
+  if (!flexRow(node, 10)) throw new Error('the action row must sit 10px below the switch')
+  // Two equal actions, so both buttons share one style object (no outline pair).
+  const btnStyle = (label) => findButton(node, label).props.style
+  if (JSON.stringify(btnStyle('修改')) !== JSON.stringify(btnStyle('发送测试推送'))) {
+    throw new Error('the edit button must match the test button')
+  }
+
+  await findButton(node, '修改').props.onClick()
+  node = b.render()
+  txt = textOf(node)
+  if (!txt.includes('保存即生效')) throw new Error('the form should explain what saving does')
+  if (!flexRow(node, 10)) throw new Error('the form buttons must be spaced from the switch')
+  b.dispose()
+})
+
+// Same ordering rule as a webhook save: a /status issued before the toggle still
+// reports the old value and must not flip the checkbox back under the user.
+await atest('P37 a late /status cannot undo the footer switch', async () => {
+  resetHost()
+  HOST.signature = false
+  const b = boot()
+  b.render()
+  await sleep(30)
+  statusHold = 1
+  b.tick(); await sleep(20)
+  if (!heldStatus.length) throw new Error('the poll was not held')
+  const box = findById(b.render(), 'sentinel-sig')
+  await box.props.onChange({ target: { checked: true } })
+  await sleep(20)
+  if (!findById(b.render(), 'sentinel-sig').props.checked) throw new Error('precondition: the switch must be on')
+  releaseStatus() // the held snapshot still says "off"
+  await sleep(40)
+  if (!findById(b.render(), 'sentinel-sig').props.checked) {
+    throw new Error('a stale /status turned the footer switch back off')
+  }
+  b.dispose()
+})
+
+// The form's "turn off" button lands in the same slot as the summary's "修改"
+// button, so React recycles one DOM node for the two. A borderColor override
+// that only exists inside the form is cleared on the way back, and the recycled
+// "修改" then falls back to currentColor: a hard ring around a plain secondary
+// action that reads as "still selected" long after the editor closed.
+await atest('P38 the edit button keeps its hairline border after cancelling', async () => {
+  resetHost()
+  const b = boot()
+  b.render()
+  await sleep(30)
+  let node = b.render()
+  await findButton(node, '修改').props.onClick()
+  node = b.render()
+  const off = findButton(node, '关闭推送')
+  if (!off) throw new Error('precondition: the form must offer the turn-off action')
+  if ('borderColor' in off.props.style) throw new Error('the turn-off button must not add a borderColor override')
+  if (!/^1px solid /.test(String(off.props.style.border))) {
+    throw new Error('the turn-off button must own its border: ' + off.props.style.border)
+  }
+  await findButton(node, '取消').props.onClick()
+  node = b.render()
+  const edit = findButton(node, '修改')
+  if (!edit) throw new Error('cancelling must bring the summary back')
+  if (!/^1px solid /.test(String(edit.props.style.border))) throw new Error('the edit button must keep its own border')
+  // Hover must never repaint the border in the brand colour: that is the ring a
+  // recycled node would show once its inline colour is gone.
+  const sheet = els['sentinel-style'] ? els['sentinel-style'].textContent : ''
+  const hoverRule = (sheet.match(/\.sentinel-panel button:hover[^{]*\{[^}]*\}/) || [''])[0]
+  if (/brand-primary/.test(hoverRule)) throw new Error('hover must not paint the border in the brand colour')
+  if (!/border-color:\s*var\(--dsw-alias-border-l2/.test(hoverRule)) throw new Error('hover must keep the hairline border: ' + hoverRule)
+  if (!/button:focus-visible[^{]*\{[^}]*outline/.test(sheet)) throw new Error('keyboard focus must keep a ring')
   b.dispose()
 })
 

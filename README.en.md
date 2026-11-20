@@ -44,7 +44,7 @@ Any one of the three is enough; if the npm/Release line is not live yet, use the
 ## First use (two steps)
 
 1. Open the **Balance Sentinel** panel: your real balance immediately, or a clear reason (signed out / no account service / network…).
-2. Pick a channel, paste the webhook (auto-detected) → **Save and send test**. The Feishu/DingTalk form includes "How to get a bot webhook": official doc + three-step path + the security settings that channel supports. **Until a channel is saved it watches without pushing**.
+2. Click **Set it up**, pick a channel, paste the webhook (auto-detected) → **Save and send test**. The Feishu/DingTalk form includes "How to get a bot webhook": official doc + three-step path + the security settings that channel supports. **Until a channel is saved it watches without pushing**.
 
 Saving only gets you to "configured, not tested"; the badge turns into "last test succeeded" once a test push actually lands, and into "last test failed" (with the reason and time) when it does not. Editing the channel or credentials clears the old result, so a stale "verified" can never pass for a working endpoint.
 
@@ -75,8 +75,8 @@ If the balance is already below a threshold when you connect, one current-state 
       quiet: { start: "", end: "" }  # e.g. "23:00"–"08:00"
       apiKey: ""                   # fallback for older hosts only
     notify:
-      signature: true              # "via …" footer line whose install spec is tappable, opt-out
-      signatureText: ""
+      signature: false             # off by default (same switch in the panel, no config edit needed); true appends the "via …" install line
+      signatureText: ""            # custom text; setting only this also turns the footer on
     localApi:
       enabled: true                # panel bridge on 127.0.0.1:17430
 ```

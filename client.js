@@ -74,19 +74,19 @@ window.__ModuleLoader__.load({
         'sec.push': '推送配置', 'push.channel': '推送通道：{c}', 'push.on': '已配置', 'push.off': '未配置',
         'push.untested': '已配置，待测试', 'push.verified': '最近测试成功', 'push.failed': '最近测试失败',
         'push.untestedHint': '通道已保存，但还没有测试过发送：点「发送测试推送」确认能收到，别等真告警时才发现地址不通。',
-        'push.verifiedAt': '最近测试成功：{t}',
-        'push.failedAt': '最近测试失败：{t}{e}',
+        'push.failedWhy': '失败原因：{e}',
         'push.testStale': '测试期间推送配置已变更，本次结果未计入当前通道。',
         'push.notPersisted': '结果未写入状态文件，重启后会丢失。',
         'chan.none': '未配置', 'chan.wecom': '企业微信', 'chan.dingtalk': '钉钉', 'chan.feishu': '飞书',
         'chan.bark': 'Bark', 'chan.serverchan': 'Server酱', 'chan.telegram': 'Telegram', 'chan.generic': '通用 Webhook',
         'push.hint': '低余额/恢复通知将推送到这里，保存即生效，无需重启。',
         'push.empty': '还没有配置推送通道。填好地址保存，余额不足时自动提醒到 IM。',
-        'push.current': '当前地址：{h}',
         'push.field.channel': '推送通道', 'push.field.url': 'Webhook 地址', 'push.field.token': 'Bot Token',
         'push.field.secret': '加签密钥（可选）', 'push.field.chat': 'chat_id',
         'push.saveTest': '保存并发送测试', 'push.save': '仅保存', 'push.saving': '保存中…',
-        'push.edit': '修改', 'push.cancel': '取消', 'push.saved': '已保存，立即生效。',
+        'push.edit': '修改', 'push.setup': '配置推送', 'push.cancel': '取消', 'push.saved': '已保存，立即生效。',
+        'push.signature': '附上安装链接', 'push.signatureHint': '（默认关闭，开启后告警尾部会多一行署名）',
+        'push.signatureTitle': '默认关闭；开启后告警尾部会多一行署名与安装链接',
         'push.disable': '关闭推送', 'push.disableConfirm': '确认关闭？', 'push.disabled': '已关闭推送，可随时重新配置。',
         'push.test': '发送测试推送', 'push.testing': '发送中…',
         'push.testOk': '测试推送成功：{c} 通道正常，发出 {n} 条。',
@@ -125,19 +125,20 @@ window.__ModuleLoader__.load({
         'sec.push': 'Push settings', 'push.channel': 'Push channel: {c}', 'push.on': 'Configured', 'push.off': 'Not set',
         'push.untested': 'Configured, not tested', 'push.verified': 'Last test succeeded', 'push.failed': 'Last test failed',
         'push.untestedHint': 'The webhook is saved but has never been tested: hit "Send test push" now, so a dead endpoint cannot stay hidden until a real alert needs it.',
-        'push.verifiedAt': 'Last test succeeded: {t}',
-        'push.failedAt': 'Last test failed: {t}{e}',
+        'push.failedWhy': 'Failure: {e}',
         'push.testStale': 'The push config changed while the test was running; this result was discarded.',
         'push.notPersisted': 'Result not written to the state file; it will be lost on restart.',
         'chan.none': 'Not set', 'chan.wecom': 'WeCom', 'chan.dingtalk': 'DingTalk', 'chan.feishu': 'Feishu',
         'chan.bark': 'Bark', 'chan.serverchan': 'ServerChan', 'chan.telegram': 'Telegram', 'chan.generic': 'Generic webhook',
         'push.hint': 'Low-balance / recovery notices push here. Saving applies immediately, no restart.',
         'push.empty': 'No push channel yet. Save a URL and get IM alerts when the balance runs low.',
-        'push.current': 'Endpoint: {h}',
+
         'push.field.channel': 'Channel', 'push.field.url': 'Webhook URL', 'push.field.token': 'Bot Token',
         'push.field.secret': 'Sign secret (optional)', 'push.field.chat': 'chat_id',
         'push.saveTest': 'Save and send test', 'push.save': 'Save only', 'push.saving': 'Saving…',
-        'push.edit': 'Edit', 'push.cancel': 'Cancel', 'push.saved': 'Saved; effective immediately.',
+        'push.edit': 'Edit', 'push.setup': 'Set up push', 'push.cancel': 'Cancel', 'push.saved': 'Saved; effective immediately.',
+        'push.signature': 'Append the install link', 'push.signatureHint': '(off by default, adds a signature line on alerts)',
+        'push.signatureTitle': 'Off by default; when on, alerts end with a signature line and install link',
         'push.disable': 'Turn off', 'push.disableConfirm': 'Confirm?', 'push.disabled': 'Push turned off; configure it again anytime.',
         'push.test': 'Send test push', 'push.testing': 'Sending…',
         'push.testOk': 'Test push via {c} succeeded, {n} message(s) sent.',
@@ -230,7 +231,6 @@ window.__ModuleLoader__.load({
       live: { width: 7, height: 7, borderRadius: '50%', background: T.success },
       sub: { color: T.tertiary, fontSize: 12, margin: '3px 0 0' },
       btn: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.layer1, color: T.sub, cursor: 'pointer', transition: 'all .15s ease', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
-      btnOutline: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: 'transparent', color: T.sub, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
       btnPrimary: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${tint(T.brand, 45)}`, background: tint(T.brand, 16), color: T.brand, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, flex: 'none' },
       hero: { background: `linear-gradient(135deg, ${tint(T.brand, 10)}, var(--sentinel-surface, #1a1a1f) 60%)`, border: 'var(--sentinel-line-w, 1px) solid var(--sentinel-line, #2e2e36)', boxShadow: 'var(--sentinel-shadow, none)', borderRadius: 12, padding: '16px 18px', marginBottom: 14 },
       heroVal: { fontSize: 30, fontWeight: 700, lineHeight: 1.2 },
@@ -349,7 +349,19 @@ window.__ModuleLoader__.load({
           body:not([data-ds-dark-theme]) .sentinel-panel { --sentinel-surface: var(--dsw-alias-bg-layer-1, #ffffff); --sentinel-line: var(--dsw-alias-border-l3, #e3e6ea); --sentinel-dash: var(--dsw-alias-border-l4, #d5d9de); --sentinel-line-w: 0.5px; --sentinel-shadow: var(--dsw-shadow-lv1, 0 1px 2px rgba(0,0,0,0.06)); --sentinel-canvas: var(--dsw-static-neutral-bluish-75, #f4f6f8); --sentinel-val-warn: #9c5c00; --sentinel-val-critical: #c62828; --sentinel-val-success: #1f7a35; }
           .sentinel-panel::-webkit-scrollbar { width: 8px; }
           .sentinel-panel::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 8px; }
-          .sentinel-btn:hover { border-color: ${T.brand}; color: ${T.text}; background: ${T.hover}; }
+          /* Quiet interaction states for every button in the panel. The border is
+             never recoloured on hover: a recycled button node can end up without
+             its own inline border colour (see the "turn off" button in the form),
+             and a brand-coloured hover rule then draws a bright ring around a
+             plain action like "修改" — which reads as "still selected" and, once
+             the pointer leaves, can survive the whole render. Focus is the same
+             deal: we draw the ring ourselves, and only for keyboard focus, so a
+             mouse click never leaves one behind. */
+          .sentinel-panel button { outline: none; -webkit-tap-highlight-color: transparent; }
+          .sentinel-panel button:hover:not(:disabled) { border-color: ${T.border}; color: ${T.text}; background: ${T.hover}; box-shadow: none; }
+          .sentinel-panel button:active:not(:disabled) { transform: scale(0.98); }
+          .sentinel-panel button:focus { outline: none; box-shadow: none; }
+          .sentinel-panel button:focus-visible { outline: 1px solid ${tint(T.brand, 55)}; outline-offset: 1px; }
           .sentinel-link:hover { opacity: 0.75; }
           .sentinel-toast { position: fixed; z-index: 999; pointer-events: none; display: flex; align-items: flex-start; gap: 8px; box-sizing: border-box; max-width: 80vw; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; transform: translateX(-50%); }
           .sentinel-toast-ok { background: ${tint(T.success, 16)}; border: 1px solid ${tint(T.success, 65)}; color: ${T.text}; }
@@ -379,7 +391,6 @@ window.__ModuleLoader__.load({
         let cancelled = false
         let timer = null
         let attempt = 0
-        let seeded = false
         const load = async () => {
           // Ordering tokens taken when the request leaves, not when it returns.
           const issued = verdictSeq.current
@@ -410,10 +421,11 @@ window.__ModuleLoader__.load({
               if (verdictSeq.current > issued && j.channel === prev.channel) return { ...j, verify: prev.verify }
               return j
             })
-            // Auto-open the setup form once, not on every poll: a later refresh
-            // must not re-open it under a user who just closed it.
-            if (!seeded && !j.configured) setEditing(true)
-            seeded = true
+            // The setup form never opens by itself. An unconfigured channel is
+            // announced by the banner (with its own CTA), so first use reads as
+            // the monitor it is instead of a form to fill in; opening it stays a
+            // deliberate click, and no refresh can pop it open again.
+            //
             // Refresh the draft only while the user has not typed in the field.
             // This must be a synchronous ref read, not a functional setState that
             // compares against a closure variable: React runs that updater later,
@@ -646,8 +658,41 @@ window.__ModuleLoader__.load({
           h('div', { style: { ...css.metaDim, marginTop: 6, whiteSpace: 'pre-line' } }, t('help.' + ch + '.steps')))
       }
 
+      // Footer opt-in lives in the panel: send the whole switch, never a delta, so
+      // the checkbox and the state file cannot disagree after a failed write.
+      const toggleSignature = async (on) => {
+        setBusy('sig'); showResult(null)
+        try {
+          const j = await post('/notify', { signature: !!on })
+          if (!j.ok) { showResult({ ok: false, message: j.message || '' }); return }
+          // Same rule as a webhook save: a /status issued before this write still
+          // reports the old switch, and letting it land would flip the checkbox
+          // back under the user.
+          configSeq.current += 1
+          setHost((prev) => ({ ...(prev || {}), signature: !!j.signature }))
+        } catch (e) { showResult({ ok: false, message: String(e?.message || e) }) }
+        finally { setBusy('') }
+      }
+
+      const signatureToggle = (extra) => h('label', {
+        htmlFor: 'sentinel-sig',
+        // The full sentence lives in the tooltip: on the card it was the longest
+        // line for the least important control.
+        title: t('push.signatureTitle'),
+        style: { display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, cursor: busy ? 'default' : 'pointer', fontSize: 12, ...extra },
+      },
+      h('input', {
+        type: 'checkbox', id: 'sentinel-sig', checked: !!host?.signature, disabled: !!busy,
+        style: { margin: '2px 0 0', accentColor: T.brand },
+        onChange: (e) => toggleSignature(e.target.checked),
+      }),
+      h('span', { style: { color: T.sub, lineHeight: 1.5 } },
+        h('span', { style: { color: T.text } }, t('push.signature')),
+        // Chinese full-width brackets sit flush against the label; the Latin
+        // parenthesis needs a small gap to stay legible.
+        h('span', { style: { ...css.metaDim, marginLeft: LANG === 'en' ? 4 : 0 } }, t('push.signatureHint'))))
+
       const pushForm = () => h('div', { style: css.card },
-        host?.configured ? null : h('div', { style: { ...css.metaDim, marginBottom: 10 } }, t('push.empty')),
         h('div', { style: css.field },
           h('label', { style: css.fieldLabel, htmlFor: 'sentinel-chan' }, t('push.field.channel')),
           h('select', {
@@ -671,11 +716,23 @@ window.__ModuleLoader__.load({
             onChange: (e) => setForm({ ...form, secret: e.target.value }),
           })) : null,
         webhookHelp(),
-        h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-          host?.configured ? h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => { setEditing(false); setOffConfirm(false); showResult(null) } }, t('push.cancel')) : null,
+        signatureToggle(),
+        // Breathing room between the switch and the actions: without it the two
+        // rows read as one block and the buttons crowd the checkbox label.
+        h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
+          // Also offered before the first save: the form no longer opens by
+          // itself, so whoever opened it (by mistake or just to look) needs a way
+          // back to the summary without saving anything.
+          h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => { setEditing(false); setOffConfirm(false); showResult(null) } }, t('push.cancel')),
           host?.configured ? h('button', {
             type: 'button', disabled: !!busy,
-            style: { ...css.btn, color: offConfirm ? T.error : T.sub, borderColor: offConfirm ? T.error : T.border },
+            // The red border is a shorthand, not a borderColor override: this
+            // button sits at the same position in the row as the "修改" button of
+            // the summary, so React recycles one DOM node for both. When the
+            // extra borderColor key disappears on the way back, React clears that
+            // inline colour and the recycled node falls back to currentColor —
+            // a hard grey ring around "修改" that no longer matches its siblings.
+            style: { ...css.btn, color: offConfirm ? T.error : T.sub, border: `1px solid ${offConfirm ? T.error : T.border}` },
             onClick: disablePush,
           }, offConfirm ? t('push.disableConfirm') : t('push.disable')) : null,
           h('button', { type: 'button', style: css.btn, disabled: !!busy, onClick: () => saveWebhook(false) }, t('push.save')),
@@ -683,7 +740,10 @@ window.__ModuleLoader__.load({
             type: 'button', disabled: !!busy,
             style: busy ? { ...css.btnPrimary, opacity: 0.6, cursor: 'not-allowed' } : css.btnPrimary,
             onClick: () => saveWebhook(true),
-          }, busy === 'test' ? t('push.testing') : busy === 'save' ? t('push.saving') : t('push.saveTest'))))
+          }, busy === 'test' ? t('push.testing') : busy === 'save' ? t('push.saving') : t('push.saveTest'))),
+        // Where this sentence is actually useful: it explains what saving does,
+        // so it belongs next to the save buttons, not in the summary card.
+        h('div', { style: { ...css.metaDim, marginTop: 8 } }, t('push.hint')))
 
       // "Configured" is not "connected": a stored webhook proves nothing until a
       // test push comes back. Four states, and only a tested-good one is green —
@@ -697,12 +757,17 @@ window.__ModuleLoader__.load({
         : connState === 'failed' ? T.error
           : connState === 'untested' ? T.brand
             : T.sub // off: a secondary grey, not the dimmed token (too faint on white)
-      const connLine = connState === 'verified' ? t('push.verifiedAt', { t: fmtTime(verifyInfo.at) })
-          + (verifyInfo.persisted === false ? ' · ' + t('push.notPersisted') : '')
-        : connState === 'failed'
-          ? t('push.failedAt', { t: fmtTime(verifyInfo.at), e: verifyInfo.error ? (LANG === 'en' ? ': ' : '：') + verifyInfo.error : '' })
-            + (verifyInfo.persisted === false ? ' · ' + t('push.notPersisted') : '')
-          : connState === 'untested' ? t('push.untestedHint') : ''
+      // Address and test time share one line: the pill on the title row already
+      // says whether that test passed, so spelling out "最近测试成功" here only
+      // added words. The failure reason stays on its own line — it is the one
+      // thing worth reading twice.
+      const testTime = verifyInfo && verifyInfo.at ? fmtTime(verifyInfo.at) : ''
+      const persistedNote = verifyInfo && verifyInfo.persisted === false ? t('push.notPersisted') : ''
+      const metaLine = [host?.urlHost, (connState === 'verified' || connState === 'failed') ? testTime : '', persistedNote]
+        .filter(Boolean).join(' · ')
+      const detailLine = connState === 'failed' ? t('push.failedWhy', { e: verifyInfo.error || '' })
+        : connState === 'untested' ? t('push.untestedHint')
+          : ''
 
       const pushSummary = () => h('div', { style: css.card },
         h('div', { style: css.row },
@@ -717,18 +782,28 @@ window.__ModuleLoader__.load({
             }),
             t('push.channel', { c: t('chan.' + host.channel) })),
           h('span', { style: css.badgeSoft(connColor) }, t('push.' + connState))),
-        host.urlHost ? h('div', { style: css.metaDim }, t('push.current', { h: host.urlHost })) : null,
+        metaLine ? h('div', { style: css.metaDim }, metaLine) : null,
         // Failure text uses the same mixed ink as css.error: some skins tint the
         // raw error token pink, which is unreadable at 11.5px on a light card.
-        connLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? ink(T.error) : undefined } }, connLine) : null,
-        h('div', { style: css.metaDim }, host.configured ? t('push.hint') : t('push.empty')),
+        detailLine ? h('div', { style: { ...css.metaDim, color: connState === 'failed' ? ink(T.error) : undefined } }, detailLine) : null,
+        host.configured ? null : h('div', { style: css.metaDim }, t('push.empty')),
+        // The switch keeps its own line and the explanation stays with it: this is
+        // the only place a user learns what the toggle does. Actions sit below it,
+        // left-aligned like the rest of the panel.
+        signatureToggle(),
         h('div', { style: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' } },
           h('button', {
             type: 'button', disabled: !!busy || !host.configured, className: 'sentinel-btn',
             style: busy || !host.configured ? { ...css.btn, opacity: 0.5, cursor: 'not-allowed' } : css.btn,
             onClick: testPush,
           }, busy === 'test' ? t('push.testing') : t('push.test')),
-          h('button', { type: 'button', disabled: !!busy, className: 'sentinel-btn', style: host.configured ? css.btnOutline : css.btn, onClick: openForm }, host.configured ? t('push.edit') : t('push.save'))))
+          // With no auto-open this button is the section's only way in, so it has
+          // to say what it does ("configure") rather than "save" — there is
+          // nothing saved at this point, it just opens the form. Same wording as
+          // dsh-aihot-radar's push card (push.setup), so the two panels read alike.
+          // Same weight as the test button next to it: two equal actions, not a
+          // primary/secondary pair.
+          h('button', { type: 'button', disabled: !!busy, className: 'sentinel-btn', style: css.btn, onClick: openForm }, host.configured ? t('push.edit') : t('push.setup'))))
 
       const resultBlock = (r, extra) => h('div', { style: { marginTop: 8, ...extra } },
         h('div', { style: { color: r.ok ? T.success : T.error, fontSize: 12 } }, r.message),

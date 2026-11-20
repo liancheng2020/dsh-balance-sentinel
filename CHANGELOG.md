@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **首次进入不再自动展开配置表单**：未配置推送通道时由顶部横幅（「监控中，通知未接通」+「现在配置」）说明并引导，表单只在点击后出现。此前进入面板即摊开一个空表单，与横幅说的是同一件事，且点「刷新」会把用户已经关掉的表单再次弹出；表单内重复的空态说明一并去掉，未配置时该卡片的入口按钮从「仅保存」改为「配置推送」（它本来也只是打开表单，并未保存任何东西；文案与同作者的 dsh-aihot-radar 对齐，横幅 CTA 仍为「现在配置」）；同时未配置的表单也有了「取消」，点开看一眼或误点都能退出，不提交任何内容。
+- **署名与安装尾注改为默认关闭**：低余额告警、恢复通知和测试推送在未显式开启时不再附带任何推广尾注，推送内容只讲余额。`notify.signature` 现在保留「未设置 / `true` / `false`」三态——不设默认值，避免宿主配置库把未填写补成 `false`、连带丢弃只配了 `signatureText` 的老用户的自定义尾注；只写 `signatureText` 视为开启，`signature: false` 优先于它。面板推送卡片新增「附上插件安装链接」勾选框（默认关闭，写入状态文件，不用改 YAML），`/status` 与发送端都按合并后的实际状态执行。README 中英示例配置同步为 `signature: false` 并说明三态。
+- **推送卡片收紧为「一行一件事」**：地址与测试时间合并成 `open.feishu.cn · 11:31:49`（成功/失败已由标题右侧徽章表达，不再重复写「最近测试成功：」），失败原因单独一行，「低余额/恢复通知将推送到这里，保存即生效，无需重启」移到配置表单底部（那里才在解释保存行为）。安装链接开关保留自己一行并带完整说明「附上安装链接（默认关闭，开启后告警尾部会多一行署名）」，动作按钮仍在其下方左对齐，且「修改」与「发送测试推送」改用同一按钮样式（不再一实一描边）；配置表单里开关与按钮之间补了 10px 间距。摘要态由 6 行减到 4 行。
+- **告警标题带上插件名**：`余额哨兵 · DeepSeek 余额告急／预警／告警已解除／已恢复`。尾注默认关闭后，被转发到群里的卡片仍需能自解释来源，前缀足够短，不会被 IM 标题截断。
+
+### Fixed
+
+- **尾注开关不再被旧实例改回**：`notify` 之前不在状态合并与写入保护里，面板关掉尾注后，另一个仍持有旧内存的实例只要保存一次常规状态（如余额），磁盘就会被写回「跟随配置」，等于把开关重新打开。现在读取合并（`mergeStateFromDisk`）会采纳磁盘值，写入（`SECTIONS`）把 `notify` 当作面板独占字段——不拥有它的保存方一律沿用文件内容，开启与关闭两个方向都成立。
+- **取消编辑后「修改」按钮不再留一圈亮边**：表单里的「关闭推送」与摘要态的「修改」在按钮行中同处一个位置，React 复用同一个 DOM 节点；「关闭推送」额外用 `borderColor` 覆盖描边颜色，回到摘要态时该覆盖被清除，复用的按钮失去自己的内联描边色、退回 `currentColor`（再叠加品牌色 hover 规则就是一圈亮蓝描边），看起来像还停在选中态。该按钮改用 `border` 简写声明描边；面板内按钮的 hover 不再改描边色，焦点环只留给键盘（`:focus-visible`），鼠标点击不残留。
+- **迟到的 `/status` 不再改回开关**：面板保存尾注开关成功后递增配置版本，保存之前发出的轮询响应整体丢弃（与保存 Webhook 同一规则），复选框不会在用户眼前跳回旧值。
+
+### Tests
+
+- `node scripts/selftest.mjs`：67 passed / 0 failed。新增覆盖三种情况——默认关闭（默认测试消息、`critical`/`warn` 告警、`recovered` 恢复通知正文均无 `安装：`、安装 spec 与仓库地址）、显式开启（`signature: true` 正常附上尾注，Feishu 走 `lark_md` note，纯文本通道只留标签）、显式关闭（`signature: false` 即使带 `signatureText` 也不附带）。F1b 断言四类标题都以「余额哨兵 · 」开头且保留告急/预警/恢复/解除字样；F4 先用源码断言 `notify.signature` 不带任何默认值，再在装有宿主 Schema 包时用真实配置解析验证 `{ notify: { signatureText } }` 解析后 `signature` 仍为 `undefined`、未配置解析为空即关闭、显式 `false`/`true` 各自生效（未安装该包时打印 SKIP，只跑源码断言）；F5 覆盖面板覆盖值与 `null`（跟随配置）的合并；B6b/B6c 起本地 hook 抓桥接真实 POST 的 `/test-push` 正文，默认无尾注、`signature: true` 有尾注，并验证 `POST /notify` 后 `/status` 与发送内容同步翻转、关回去也生效。
+- `node scripts/selftest-client.mjs`：39 passed / 0 failed（P35：面板开关默认未勾选、勾选后发出 `signature: true`、再由服务端回填为勾选态、取消勾选可回到关闭；P37：旧 `/status` 返回后复选框不得跳回旧值；P38：「关闭推送」不得引入 `borderColor` 覆盖、取消后「修改」仍自带描边、hover 规则不得把描边刷成品牌色、键盘焦点仍有焦点环）。
+- 针对上述两个合并点的有效性验证：M15 使用真实临时状态文件，分别以 `false`/`true` 让面板实例写一次、再让「仍持有跟随配置值」的实例只保存 `alert`，断言磁盘值不变；再断言 `mergeStateFromDisk` 会采纳磁盘值。单独移除写入保护时 M15 报 `a routine save must not overwrite false`，单独移除读取合并时报 `mergeStateFromDisk must adopt false`。P37 移除配置版本递增后报 `a stale /status turned the footer switch back off`。
+- 打包产物检查：对 `npm pack` 的 tarball 解包后直接 import 包内 `lib/notify.js` 与 `lib/balance.js`（不读工作区源码），14/14 通过 —— `index.js` 里 `notify.signature` 无默认值、`signatureLine({})` 为空、`signatureEnabled({ signatureText })` 为真、面板覆盖优先于配置、默认测试消息与 `critical`/`warn`/`recovered` 正文均不含尾注、三类告警标题均以「余额哨兵 · 」开头、显式开启时正常附上。
+- LPM 的报告针对 0.1.2，本次改动未经重新扫描，不能据此认为相关拦截已解除。
+
 ## [0.1.3] - 2026-11-18
 
 ### Fixed

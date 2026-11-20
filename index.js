@@ -30,7 +30,12 @@ export const Config = z.object({
     apiKey: z.string().default(''),
   }).default({}),
   notify: z.object({
-    signature: z.boolean().default(true),
+    // Deliberately NO default: the config store materialises defaults into the
+    // saved object, and a default of `false` would make "unset" indistinguishable
+    // from an explicit opt-out — erasing a custom signatureText set by an older
+    // user. Leaving it optional keeps three states: unset (footer follows
+    // signatureText), true (append), false (never append).
+    signature: z.boolean(),
     signatureText: z.string().default(''),
   }).default({}),
   localApi: z.object({
