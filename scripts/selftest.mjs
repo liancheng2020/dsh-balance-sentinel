@@ -5,7 +5,7 @@
 
 import assert from 'node:assert'
 import http from 'node:http'
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, utimesSync, unlinkSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -278,6 +278,22 @@ test('F5 panel override wins over config, null defers to it', () => {
   assert.equal(signatureEnabled(effectiveNotify({}, { notify: { signature: null } })), false)
   assert.equal(signatureEnabled(effectiveNotify({ signatureText: 'x' }, {})), true, 'custom text still enables')
 })
+// The identity fields are the only thing a Bark group list or a self-hosted
+// collector sees: they must name THIS plugin, not the plugin the adapters were
+// copied from.
+await atest('F6 bark group and generic source identify as balance-sentinel', async () => {
+  const bodies = []
+  const n = createNotifier({
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(init.body))
+      return { ok: true, status: 200, text: async () => '{"code":200}', headers: { get: () => 'application/json' } }
+    },
+  })
+  await n.send({ channel: 'bark', url: 'https://api.day.app/key', secret: '' }, 't', 'body')
+  await n.send({ channel: 'generic', url: 'https://hooks.example/x', secret: '' }, 't', 'body')
+  assert.equal(bodies[0].group, 'balance-sentinel', 'bark group must name this plugin')
+  assert.equal(bodies[1].source, 'balance-sentinel', 'generic source must name this plugin')
+})
 
 // ---- S: source chain ----
 await atest('S1 no source -> no-source', async () => {
@@ -342,6 +358,35 @@ await atest('S9 never-returning host promise: deadline wins, monitor keeps cycli
   ctl.stop()
 })
 
+// README promises "host account when signed in, otherwise the key". A signed-out
+// host used to short-circuit before the key path, so a configured key never ran.
+await atest('S10 signed-out host with a key falls back to the REST key', async () => {
+  const urls = []
+  const f = createBalanceSource({
+    remoteGet: async () => null,
+    apiKey: 'sk-x',
+    fetchImpl: async (url) => {
+      urls.push(String(url))
+      return { ok: true, status: 200, json: async () => ({ balance_infos: [{ currency: 'CNY', total_balance: '9' }] }) }
+    },
+  })
+  const r = await f()
+  assert.equal(r.ok, true, 'the key must be used when the host is signed out')
+  assert.equal(r.source, 'key')
+  assert.equal(r.wallets[0].total, 9)
+  assert.ok(urls[0].includes('api.deepseek.com'), 'fallback must hit the documented REST endpoint')
+})
+// When neither source can answer, the reason must describe the real blocker:
+// the key was tried and rejected, not "signed out".
+await atest('S11 signed-out host + rejected key reports unauthorized', async () => {
+  const f = createBalanceSource({
+    remoteGet: async () => null,
+    apiKey: 'sk-x',
+    fetchImpl: async () => ({ ok: false, status: 401 }),
+  })
+  assert.equal((await f()).reason, 'unauthorized')
+})
+
 // ---- M: cross-instance merge ----
 test('M1 disk authoritative for pending/prefs/webhook', () => {
   mkdirSync(join(process.env.DSH_HOME, 'balance-sentinel'), { recursive: true })
@@ -366,6 +411,43 @@ test('M2 re-entrant saveState under a held cycle lock persists', () => {
   assert.equal(saveState(s), true)
   rel()
   assert.equal(loadState().balance.value, 9)
+})
+
+// ---- C: lock recovery ----
+// A lock whose payload cannot be read used to block every instance forever: the
+// takeover path needed a parseable stamp and gave up on a corrupt file. Only a
+// lock that is BOTH unreadable AND older than the TTL may be recovered — one
+// created a moment ago (still being written) and a live one must be left alone.
+const lockFile = () => join(process.env.DSH_HOME, 'balance-sentinel', 'state.json.lock')
+const ageFile = (p, ms) => { const t = new Date(Date.now() - ms); utimesSync(p, t, t) }
+
+test('C1 a corrupt lock older than the TTL is recovered', () => {
+  mkdirSync(join(process.env.DSH_HOME, 'balance-sentinel'), { recursive: true })
+  writeFileSync(lockFile(), '{"pid":123,') // truncated payload, no readable ts
+  ageFile(lockFile(), 120000)
+  const rel = acquireStateLock()
+  assert.ok(rel, 'an expired unreadable lock must not block forever')
+  rel()
+  assert.equal(existsSync(lockFile()), false, 'our lock must be released again')
+})
+
+test('C2 a corrupt lock created just now is left alone', () => {
+  writeFileSync(lockFile(), '') // the window between create and write
+  assert.equal(acquireStateLock(), null, 'a lock still being written must not be stolen')
+  unlinkSync(lockFile())
+})
+
+test('C3 a live lock with a fresh heartbeat is never taken over', () => {
+  writeFileSync(lockFile(), JSON.stringify({ pid: 4242, ts: Date.now(), token: 'other' }))
+  assert.equal(acquireStateLock(), null)
+  unlinkSync(lockFile())
+})
+
+test('C4 a readable lock past the TTL is still recovered', () => {
+  writeFileSync(lockFile(), JSON.stringify({ pid: 4242, ts: Date.now() - 120000, token: 'dead' }))
+  const rel = acquireStateLock()
+  assert.ok(rel, 'a crashed holder must not block the next cycle')
+  rel()
 })
 
 // ---- B: bridge ----
@@ -754,6 +836,201 @@ await atest('M6 fetch throw does not wedge the scheduler', async () => {
   ctl.poke(); await pause(400)
   assert.ok(errors >= 1, 'first cycle reported the throw')
   assert.ok(cycles >= 2, 'second cycle still ran')
+  ctl.stop()
+})
+
+// Two instances answer out of order (slow first query, fast second one). The
+// late reply was issued before the newer reading, so it must be dropped whole:
+// no rollback of balance, no level change, no push.
+await atest('R1 an out-of-order reply cannot roll the balance back or push', async () => {
+  const dir = join(process.env.DSH_HOME, 'balance-sentinel')
+  mkdirSync(dir, { recursive: true })
+  rmSync(join(dir, 'state.json.lock'), { force: true })
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({
+    webhook: { channel: 'generic', url: 'http://x', secret: '' },
+    alert: { level: 'normal', since: null, episodeAt: 0, lastPushAt: 0, lastRecoveryAt: 0 },
+    pending: null, balance: { value: null, currency: null, at: null, ok: false, reason: null },
+    lastResult: { at: null, ok: false, error: null },
+  }))
+  const a = loadState()
+  const b = loadState()
+  const sends = []
+  const mk = (st, total, delay) => startMonitor({
+    fetchBalance: () => new Promise((r) => setTimeout(() => r(okFr(total)), delay)),
+    state: st,
+    notifier: { send: async (_wh, title) => { sends.push(title); return { ok: true, chunks: 1 } } },
+    config: { balance: { pollSeconds: 3600 } },
+    save: (st2) => saveState(st2),
+  })
+  const older = mk(a, 8, 260)  // issued first, answers last
+  const newer = mk(b, 30, 60)  // issued later, answers first
+  older.poke()
+  await pause(70)
+  newer.poke()
+  await pause(900)
+  assert.deepEqual(sends, [], 'a superseded reading must not push')
+  const disk = loadState()
+  assert.equal(disk.balance.value, 30, 'the newer reading must win: ' + JSON.stringify(disk.balance))
+  assert.equal(disk.alert.level, 'normal', 'the stale reading must not change the level')
+  older.stop(); newer.stop()
+})
+
+// Dropping a reply must not take the scheduler with it: the early exit used to
+// skip the tail that re-arms the timer, so that instance stopped polling until
+// something poked it again. The 1s floor (test-only env, production is 60s) lets
+// the automatic next cycle happen inside the test.
+await atest('R1b a superseded reply still leaves the next poll armed', async () => {
+  process.env.SENTINEL_POLL_FLOOR_SEC = '1'
+  const dir = join(process.env.DSH_HOME, 'balance-sentinel')
+  const mon = []
+  try {
+    mkdirSync(dir, { recursive: true })
+    rmSync(join(dir, 'state.json.lock'), { force: true })
+    writeFileSync(join(dir, 'state.json'), JSON.stringify({
+      webhook: { channel: 'generic', url: 'http://x', secret: '' },
+      alert: { level: 'normal', since: null, episodeAt: 0, lastPushAt: 0, lastRecoveryAt: 0 },
+      pending: null, balance: { value: null, currency: null, at: null, ok: false, reason: null },
+      lastResult: { at: null, ok: false, error: null },
+    }))
+    const a = loadState()
+    const callsA = []
+    const ctlA = startMonitor({
+      fetchBalance: () => { callsA.push(1); return new Promise((r) => setTimeout(() => r(okFr(3)), 240)) },
+      state: a,
+      notifier: { send: async () => ({ ok: true, chunks: 1 }) },
+      config: { balance: { pollSeconds: 1 } },
+      save: (st) => saveState(st),
+    })
+    const b = loadState()
+    const ctlB = startMonitor({
+      fetchBalance: () => new Promise((r) => setTimeout(() => r(okFr(30)), 40)),
+      state: b,
+      notifier: { send: async () => ({ ok: true, chunks: 1 }) },
+      config: { balance: { pollSeconds: 1 } },
+      save: (st) => saveState(st),
+    })
+    mon.push(ctlA, ctlB)
+    ctlA.poke()          // issued first, answers last -> superseded
+    await pause(70)
+    ctlB.poke()          // issued later, answers first -> recorded
+    await pause(1700)    // long enough for the 1s automatic re-arm to fire once
+    assert.ok(callsA.length >= 2, 'the dropped cycle must still re-arm the poll (calls: ' + callsA.length + ')')
+  } finally {
+    for (const c of mon) c.stop()
+    delete process.env.SENTINEL_POLL_FLOOR_SEC
+  }
+})
+
+// Same-millisecond ties: the stamp has millisecond resolution, so two instances
+// can issue their queries at the same instant and neither is "older". The
+// already-accepted reading must stand — otherwise ¥3 recorded after ¥30 rolls the
+// balance back and alerts again.
+await atest('R1c a same-millisecond reply cannot roll an accepted balance back', async () => {
+  const dir = join(process.env.DSH_HOME, 'balance-sentinel')
+  mkdirSync(dir, { recursive: true })
+  rmSync(join(dir, 'state.json.lock'), { force: true })
+  const fixed = Date.now()
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({
+    webhook: { channel: 'generic', url: 'http://x', secret: '' },
+    alert: { level: 'normal', since: null, episodeAt: 0, lastPushAt: 0, lastRecoveryAt: 0 },
+    pending: null,
+    balance: { value: 30, currency: 'CNY', at: new Date(fixed - 1000).toISOString(), ok: true, reason: null },
+    lastResult: { at: new Date(fixed).toISOString(), ok: true, error: null },
+  }))
+  const s = loadState()
+  const sends = []
+  const cycles = []
+  const realNow = Date.now
+  let ctl
+  try {
+    // Pin this cycle to the exact millisecond the recorded reading carries.
+    Date.now = () => fixed
+    ctl = startMonitor({
+      fetchBalance: async () => okFr(3),
+      state: s,
+      notifier: { send: async (_wh, title) => { sends.push(title); return { ok: true, chunks: 1 } } },
+      config: { balance: { pollSeconds: 3600 } },
+      save: (st) => saveState(st),
+      onCycle: (r) => cycles.push(r),
+    })
+    ctl.poke()
+    await pause(500)
+  } finally {
+    Date.now = realNow
+    ctl?.stop()
+  }
+  assert.deepEqual(sends, [], 'a tie must not push')
+  const disk = loadState()
+  assert.equal(disk.balance.value, 30, 'the accepted balance must not roll back: ' + JSON.stringify(disk.balance))
+  assert.equal(disk.alert.level, 'normal', 'a tie must not change the level')
+  assert.ok(cycles.some((r) => r.stale), 'the cycle must report a superseded reading')
+})
+
+// Stopping while the balance call is in flight: the answer arrives after stop
+// and must be ignored, not delivered.
+await atest('R2 stopping mid-query never sends the late answer', async () => {
+  const dir = join(process.env.DSH_HOME, 'balance-sentinel')
+  mkdirSync(dir, { recursive: true })
+  rmSync(join(dir, 'state.json.lock'), { force: true })
+  const s = loadState()
+  s.webhook = { channel: 'generic', url: 'http://x', secret: '' }
+  s.alert = { level: 'normal', since: null, episodeAt: 0, lastPushAt: 0, lastRecoveryAt: 0 }
+  s.balance = { value: null, currency: null, at: null, ok: false, reason: null }
+  s.lastResult = { at: null, ok: false, error: null }
+  s.pending = null
+  saveState(s)
+  let answer
+  let started
+  const gate = new Promise((r) => { started = r })
+  let sends = 0
+  const ctl = startMonitor({
+    fetchBalance: () => { started(); return new Promise((r) => { answer = r }) },
+    state: s,
+    notifier: { send: async () => { sends++; return { ok: true, chunks: 1 } } },
+    config: { balance: { pollSeconds: 3600 } },
+    save: (st) => saveState(st),
+  })
+  ctl.poke()
+  await gate      // the cycle is now waiting on the balance source
+  ctl.stop()
+  answer(okFr(10)) // low balance: would transition to warn and push
+  await pause(300)
+  assert.equal(sends, 0, 'a stopped monitor must not push what an old query returned')
+  assert.equal(loadState().balance.value, null, 'nothing may be recorded after stop')
+})
+
+// A failed poll leaves the last known value in state.balance. That number must
+// not be presented as the current balance: the alert waits for a real reading.
+await atest('R3 a failed poll holds the pending alert until a fresh balance lands', async () => {
+  const dir = join(process.env.DSH_HOME, 'balance-sentinel')
+  mkdirSync(dir, { recursive: true })
+  rmSync(join(dir, 'state.json.lock'), { force: true })
+  const s = loadState()
+  s.webhook = { channel: 'generic', url: 'http://x', secret: '' }
+  s.alert = { level: 'normal', since: null, episodeAt: 0, lastPushAt: 0, lastRecoveryAt: 0 }
+  s.balance = { value: null, currency: null, at: null, ok: false, reason: null }
+  s.lastResult = { at: null, ok: false, error: null }
+  s.pending = null
+  applyBalance(s, okFr(10), TH, NOW) // warn, pending warn
+  saveState(s)
+  let fail = true
+  const sends = []
+  const ctl = startMonitor({
+    fetchBalance: async () => (fail ? { ok: false, reason: 'network' } : okFr(9)),
+    state: s,
+    notifier: { send: async (_wh, title) => { sends.push(title); return { ok: true, chunks: 1 } } },
+    config: { balance: { pollSeconds: 3600 } },
+    save: (st) => saveState(st),
+  })
+  ctl.poke()
+  await pause(500)
+  assert.equal(sends.length, 0, 'the old number must not be sent as the current balance')
+  assert.ok(loadState().pending, 'the pending alert must survive the failed poll')
+  fail = false
+  ctl.poke()
+  await pause(500)
+  assert.equal(sends.length, 1, 'once a real balance is classified, the alert goes out')
+  assert.equal(loadState().pending, null)
   ctl.stop()
 })
 
