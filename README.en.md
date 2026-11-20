@@ -32,14 +32,14 @@ dsh plugin --profile web add github:liancheng2020/dsh-balance-sentinel
 # or npm (published to npm alongside each Release)
 dsh plugin --profile web add dsh-balance-sentinel
 # or the pinned Release tarball
-dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentinel/releases/download/v0.1.3/dsh-balance-sentinel-0.1.3.tgz
+dsh plugin --profile web add https://github.com/liancheng2020/dsh-balance-sentinel/releases/download/v0.1.5/dsh-balance-sentinel-0.1.5.tgz
 ```
 
 Any one of the three is enough; if the npm/Release line is not live yet, use the first. Desktop app: Settings → Plugins → add `dsh-balance-sentinel` or `github:liancheng2020/dsh-balance-sentinel`. Restart DSH once.
 
 **Where it runs**: local DSH desktop or local web host only — monitoring lives in the DSH process and **stops when DSH exits** (reopening resumes from the local state file); **no remote web panel** (the bridge binds `127.0.0.1:17430` and only accepts pages from this machine). **Key-free host accounts are supported**: the host must expose the account service with a signed-in account (key-free ≠ account-free); otherwise use `DEEPSEEK_API_KEY` or `balance.apiKey` — with neither, the panel states the exact reason.
 
-> Current version `0.1.3` (see [CHANGELOG](CHANGELOG.md)).
+> Current version `0.1.5` (see [CHANGELOG](CHANGELOG.md)).
 
 ## First use (two steps)
 

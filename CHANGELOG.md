@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.1.5] - 2026-11-20
 
 ### Changed
 
@@ -101,6 +101,7 @@ All notable changes to this project are documented here. Format follows
 - README 面板截图前置、补「先看三行」要点；适用范围与免 Key 边界并入安装节，不再单列小节。
 - GitHub About 描述收紧为一句：低余额推送 + 本机运行边界。
 
+[0.1.5]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.5
 [0.1.3]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.3
 [0.1.2]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.2
 [0.1.0]: https://github.com/liancheng2020/dsh-balance-sentinel/releases/tag/v0.1.0
